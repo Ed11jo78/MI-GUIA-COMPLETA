@@ -1,0 +1,4 @@
+# Netlify Redirects Configuration File for SPA & Demos
+/ecommerce-sap-demo  /ecommerce-sap-demo.html  200
+/network-pfsense-demo /network-pfsense-demo.html 200
+/taskmaster-finance-demo /taskmaster-finance-demo.html 200

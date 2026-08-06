@@ -10,6 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script>if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -58,9 +59,12 @@
       <span class="nav-badge network-badge" id="sb-network">0</span>
     </button>
 
-    <div class="nav-section-label">Profesional</div>
+    <div class="nav-section-label">Profesional & Herramientas</div>
     <button class="nav-btn" id="nav-portfolio" onclick="switchModule('portfolio')">
       <span class="nav-icon">💼</span><span class="nav-label">Portafolio TI</span>
+    </button>
+    <button class="nav-btn" id="nav-database" onclick="switchModule('database')">
+      <span class="nav-icon">🗄️</span><span class="nav-label">Base de Datos General</span>
     </button>
 
     <div class="nav-section-label">Personal & Salud</div>
@@ -681,6 +685,104 @@
   <!-- Container imprimible para PDF Resumen Curricular Sintético -->
   <div id="printable-cv-container" class="printable-cv-hidden"></div>
 
+
+  <!-- ═══════════ GENERAL DATABASE IMPORT / EXPORT MODULE ═══════════ -->
+  <section class="app-section" id="sec-database" style="display:none">
+    <!-- 📊 Live Database Summary Counters -->
+    <div class="dash-grid" style="padding:24px 28px 0">
+      <div class="dash-card">
+        <div class="dash-card-icon" style="color:var(--green)">💰</div>
+        <div class="dash-card-info">
+          <div class="dash-card-num" id="db-count-econ">0 movs</div>
+          <div class="dash-card-label">Transacciones & Cuentas</div>
+          <div class="dash-card-sub">Binance, AIRTM, Zinli, Bs</div>
+        </div>
+      </div>
+
+      <div class="dash-card">
+        <div class="dash-card-icon" style="color:var(--red)">🔴</div>
+        <div class="dash-card-info">
+          <div class="dash-card-num" id="db-count-debts">0 deudas</div>
+          <div class="dash-card-label">Control de Deudas</div>
+          <div class="dash-card-sub">Abonos en Bolívares acumulados</div>
+        </div>
+      </div>
+
+      <div class="dash-card">
+        <div class="dash-card-icon" style="color:var(--cyan)">📋</div>
+        <div class="dash-card-info">
+          <div class="dash-card-num" id="db-count-tasks">0 tareas</div>
+          <div class="dash-card-label">Tareas & Tickets IT</div>
+          <div class="dash-card-sub">Pendientes e Incidencias</div>
+        </div>
+      </div>
+
+      <div class="dash-card">
+        <div class="dash-card-icon" style="color:var(--purple)">💼</div>
+        <div class="dash-card-info">
+          <div class="dash-card-num" id="db-count-pf">0 ítems</div>
+          <div class="dash-card-label">Portafolio & Documentos</div>
+          <div class="dash-card-sub">Certificados y Experiencia CV</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="module-toolbar">
+      <div class="module-title">
+        <h2>🗄️ Base de Datos General del Sistema</h2>
+        <span class="subtitle">Resumen estadístico en vivo, respaldos en Excel/JSON e importación para modificar o sincronizar información nueva.</span>
+      </div>
+    </div>
+
+    <div style="padding:0 28px 100px">
+      <!-- Resumen Detallado -->
+      <div class="dash-panel" style="margin-bottom:24px">
+        <div class="panel-header"><span>📋 Resumen Detallado de Contenido Almacenado</span></div>
+        <div id="db-summary-details" style="font-size:13px;color:var(--text-secondary);line-height:1.7;padding:8px 0">
+          Cargando resumen de tablas...
+        </div>
+      </div>
+
+      <div class="dash-row">
+        <!-- Export Box -->
+        <div class="dash-panel" style="flex:1">
+          <div class="panel-header"><span>📤 Exportar Base de Datos General</span></div>
+          <p style="font-size:13px;color:var(--text-secondary);margin:12px 0 18px;line-height:1.6">Genera una copia descargable en Excel (.xlsx) con 7 pestañas estructuradas o un archivo JSON completo para migrar a otros equipos.</p>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <button class="btn-primary" style="background:linear-gradient(135deg,#10b981,#059669);color:#fff;font-weight:800;padding:12px;display:flex;align-items:center;justify-content:center;gap:8px;border:none;border-radius:10px;cursor:pointer" onclick="exportSystemDataExcel()">
+              📊 Exportar Base de Datos a Excel (.xlsx)
+            </button>
+            <button class="btn-secondary" style="padding:10px;display:flex;align-items:center;justify-content:center;gap:8px;border-radius:10px;cursor:pointer" onclick="exportSystemDataJSON()">
+              💾 Exportar Backup General JSON (.json)
+            </button>
+          </div>
+        </div>
+
+        <!-- Import Box -->
+        <div class="dash-panel" style="flex:1">
+          <div class="panel-header"><span>📥 Importar & Sincronizar Información Nueva</span></div>
+          <p style="font-size:13px;color:var(--text-secondary);margin:12px 0 14px;line-height:1.6">Carga una hoja de cálculo Excel o archivo JSON para agregar o modificar los datos guardados en el sistema.</p>
+          
+          <div style="margin-bottom:14px;display:flex;gap:12px;background:rgba(0,0,0,0.2);padding:10px;border-radius:10px;flex-wrap:wrap">
+            <label style="font-size:12px;color:var(--text-primary);cursor:pointer;display:flex;align-items:center;gap:6px">
+              <input type="radio" name="importMode" value="merge" checked> 🔄 Fusionar con datos existentes (Modificar/Agregar)
+            </label>
+            <label style="font-size:12px;color:var(--text-primary);cursor:pointer;display:flex;align-items:center;gap:6px">
+              <input type="radio" name="importMode" value="overwrite"> ⚠️ Reemplazar todo (Sobrescribir)
+            </label>
+          </div>
+
+          <div style="border:2px dashed var(--border-light);border-radius:14px;padding:22px;text-align:center;background:rgba(255,255,255,0.02)" id="excel-drop-zone">
+            <div style="font-size:36px;margin-bottom:6px">📂</div>
+            <div style="font-size:13px;font-weight:800;color:var(--text-primary)">Arrastra tu archivo Excel o JSON aquí</div>
+            <div style="font-size:11px;color:var(--text-muted);margin:4px 0 14px">Formatos: .xlsx, .xls, .csv, .json</div>
+            <input type="file" id="excel-file-input" accept=".xlsx,.xls,.csv,.json" style="display:none" onchange="handleExcelImport(event)">
+            <button class="btn-primary" style="padding:10px 18px;font-size:12px;background:var(--accent);color:#070913;font-weight:800;border:none;border-radius:8px;cursor:pointer" onclick="document.getElementById('excel-file-input').click()">📁 Cargar Archivo y Sincronizar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <!-- ═══════════ ACTIVITIES & WORKOUT ═══════════ -->
   <section class="app-section" id="sec-activities">

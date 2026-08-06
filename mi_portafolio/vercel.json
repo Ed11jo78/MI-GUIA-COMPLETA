@@ -1,0 +1,9 @@
+{
+  "version": 2,
+  "cleanUrls": true,
+  "routes": [
+    { "src": "/ecommerce-sap-demo", "dest": "/ecommerce-sap-demo.html" },
+    { "src": "/network-pfsense-demo", "dest": "/network-pfsense-demo.html" },
+    { "src": "/taskmaster-finance-demo", "dest": "/taskmaster-finance-demo.html" }
+  ]
+}
