@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EJCP TaskMaster | Sistema de Gestión Financiera & Portafolio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card-bg: #161f31;
+      --panel-bg: #0f172a;
+      --accent: #00d2ff;
+      --accent-green: #10b981;
+      --accent-purple: #8b5cf6;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --border: rgba(255,255,255,0.08);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Outfit', sans-serif; }
+    body { background: var(--bg); color: var(--text); min-height: 100vh; padding-bottom: 60px; }
+    
+    header { background: rgba(22, 31, 49, 0.9); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; padding: 16px 32px; display: flex; justify-content: space-between; align-items: center; }
+    .logo { font-size: 22px; font-weight: 900; background: linear-gradient(135deg, #8b5cf6, #00d2ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; display: flex; align-items: center; gap: 8px; }
+    
+    .container { max-width: 1200px; margin: 32px auto; padding: 0 20px; }
+    .back-nav { display: inline-flex; align-items: center; gap: 8px; color: var(--accent); text-decoration: none; font-weight: 700; margin-bottom: 20px; background: rgba(0,210,255,0.1); padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(0,210,255,0.2); }
+    
+    .hero-banner { background: linear-gradient(135deg, #1e293b, #0f172a); border: 1px solid var(--border); border-radius: 16px; padding: 32px; margin-bottom: 32px; }
+    .hero-banner h1 { font-size: 28px; font-weight: 900; color: #fff; margin-bottom: 8px; }
+    .hero-banner p { font-size: 14px; color: var(--text-muted); line-height: 1.6; max-width: 750px; }
+    
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; }
+    
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 24px; }
+    .card-title { font-size: 18px; font-weight: 800; color: #fff; margin-bottom: 12px; }
+    .card-desc { font-size: 13px; color: var(--text-muted); line-height: 1.6; margin-bottom: 16px; }
+    
+    .btn-action { width: 100%; padding: 12px; background: linear-gradient(135deg, var(--accent), #0080ff); color: #0b0f19; font-weight: 800; border: none; border-radius: 8px; cursor: pointer; text-decoration: none; display: inline-block; text-align: center; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo">📱 EJCP TaskMaster <span style="font-size:12px;color:var(--text-muted);font-weight:400">| Architecture & Technical Specs</span></div>
+  </header>
+
+  <div class="container">
+    <a href="index.html" class="back-nav">⬅️ Volver al Portafolio Principal</a>
+
+    <div class="hero-banner">
+      <h1>Demostración en Vivo: EJCP TaskMaster & Sistema Financiero</h1>
+      <p>Aplicación web SPA autónoma para la gestión integral de finanzas personales multi-cuenta (Binance USDT, AIRTM, Zinli, Bolívares, Efectivo), control de deudas con deducción en dólares a tasa BCV, ingesta de CVs en PDF y visor de certificaciones oficiales en 1-Click.</p>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="card-title">💰 Módulo de Economía & Multi-Moneda</div>
+        <div class="card-desc">Sincronización en tiempo real de tipos de cambio oficial BCV, P2P Binance y AIRTM. Permite registrar movimientos entre cuentas con descuento automático de saldos y comisiones.</div>
+        <a href="index.html#sec-finances" class="btn-action">Ir al Módulo de Economía en Vivo</a>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📑 Generador de Portafolio desde PDF</div>
+        <div class="card-desc">Lector client-side estructurado en JavaScript que analiza archivos PDF usando PDF.js, extrae datos profesionales e hidrata el portafolio dinámico al instante.</div>
+        <a href="index.html#sec-portfolio" class="btn-action">Ver Portafolio Generado en Vivo</a>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📄 Visor 1-Click de Certificados</div>
+        <div class="card-desc">Modal Lightbox de alta definición que permite inspeccionar o descargar títulos universitarios, cédulas y certificados verificados.</div>
+        <a href="index.html#sec-portfolio" class="btn-action">Abrir Visor de Certificados</a>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

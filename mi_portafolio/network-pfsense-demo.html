@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>pfSense WebGUI | ALTECEL & OPSU Firewall & Network Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+  <style>
+    :root {
+      --pfsense-dark: #121824;
+      --pfsense-nav: #1b2436;
+      --pfsense-accent: #3b82f6;
+      --pfsense-green: #10b981;
+      --pfsense-red: #ef4444;
+      --pfsense-amber: #f59e0b;
+      --pfsense-card: #182234;
+      --pfsense-border: rgba(255, 255, 255, 0.08);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
+    body { background-color: var(--pfsense-dark); color: var(--text-main); min-height: 100vh; padding-bottom: 60px; }
+
+    /* Top pfSense Navigation Header */
+    header.pfsense-header {
+      background: var(--pfsense-nav);
+      border-bottom: 2px solid var(--pfsense-accent);
+      padding: 0.8rem 2rem;
+      display: flex; justify-content: space-between; align-items: center;
+      position: sticky; top: 0; z-index: 100;
+    }
+
+    .pfsense-brand { display: flex; align-items: center; gap: 0.8rem; text-decoration: none; }
+    .pfsense-logo { font-size: 1.5rem; font-weight: 900; color: #fff; letter-spacing: -0.5px; }
+    .pfsense-logo span { color: var(--pfsense-accent); }
+    .pfsense-tag { background: rgba(59,130,246,0.15); color: var(--pfsense-accent); border: 1px solid rgba(59,130,246,0.3); padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.75rem; font-weight: 700; }
+
+    .pfsense-nav-links { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .nav-tab-btn {
+      background: rgba(255,255,255,0.04); border: 1px solid var(--pfsense-border);
+      color: var(--text-muted); padding: 0.5rem 1rem; border-radius: 8px;
+      font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: all 0.2s;
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .nav-tab-btn:hover, .nav-tab-btn.active {
+      background: var(--pfsense-accent); color: #fff; border-color: var(--pfsense-accent);
+    }
+
+    /* Container */
+    .container { max-width: 1350px; margin: 1.5rem auto; padding: 0 1rem; }
+
+    .back-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
+    .back-nav { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--pfsense-accent); text-decoration: none; font-weight: 700; font-size: 0.88rem; background: rgba(59,130,246,0.1); padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid rgba(59,130,246,0.2); }
+
+    /* Dashboard Widgets Grid */
+    .widget-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; }
+    @media (max-width: 768px) {
+      header.pfsense-header { flex-direction: column; gap: 1rem; padding: 1rem; align-items: stretch; text-align: center; }
+      .pfsense-nav-links { justify-content: center; }
+      .widget-grid { grid-template-columns: 1fr !important; }
+      .widget-body { overflow-x: auto; }
+      .pfsense-table { min-width: 480px; }
+    }
+
+    .widget-card { background: var(--pfsense-card); border: 1px solid var(--pfsense-border); border-radius: 14px; overflow: hidden; }
+    .widget-header { background: rgba(0,0,0,0.2); border-bottom: 1px solid var(--pfsense-border); padding: 0.9rem 1.2rem; font-size: 0.95rem; font-weight: 800; color: #fff; display: flex; justify-content: space-between; align-items: center; }
+    .widget-body { padding: 1.2rem; }
+
+    /* Tables */
+    .pfsense-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left; }
+    .pfsense-table th { background: rgba(0,0,0,0.3); padding: 0.6rem 0.8rem; color: var(--text-muted); font-weight: 700; border-bottom: 1px solid var(--pfsense-border); }
+    .pfsense-table td { padding: 0.65rem 0.8rem; border-bottom: 1px solid var(--pfsense-border); }
+    .pfsense-table tr:last-child td { border-bottom: none; }
+
+    /* Status Badges */
+    .status-up { background: rgba(16,185,129,0.15); color: var(--pfsense-green); border: 1px solid rgba(16,185,129,0.3); padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 700; font-size: 0.75rem; }
+    .status-down { background: rgba(239,68,68,0.15); color: var(--pfsense-red); border: 1px solid rgba(239,68,68,0.3); padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 700; font-size: 0.75rem; }
+
+    /* Gauge & Progress Bars */
+    .progress-bar { width: 100%; height: 8px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden; margin-top: 4px; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, var(--pfsense-accent), var(--pfsense-green)); border-radius: 4px; }
+
+    /* Terminal Console */
+    .terminal-box { background: #070b14; border: 1px solid #1e293b; border-radius: 12px; padding: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--pfsense-green); height: 260px; overflow-y: auto; line-height: 1.6; }
+    .terminal-line.block { color: var(--pfsense-red); font-weight: 700; }
+    .terminal-line.info { color: var(--pfsense-accent); }
+
+    .btn { background: var(--pfsense-accent); color: #fff; border: none; padding: 0.6rem 1.2rem; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.85rem; }
+    .btn-green { background: var(--pfsense-green); }
+    .btn-red { background: var(--pfsense-red); }
+  </style>
+</head>
+<body>
+
+  <!-- Top pfSense Navigation Header -->
+  <header class="pfsense-header">
+    <a href="index.html" class="pfsense-brand">
+      <div class="pfsense-logo">pf<span>Sense</span></div>
+      <div class="pfsense-tag">CE 2.7.0 RELEASE</div>
+    </a>
+
+    <!-- Menu Modules Tabs -->
+    <div class="pfsense-nav-links">
+      <button class="nav-tab-btn active" onclick="showTab('dashboard', this)"><i class="fa-solid fa-gauge-high"></i> Dashboard</button>
+      <button class="nav-tab-btn" onclick="showTab('firewall', this)"><i class="fa-solid fa-shield-halved"></i> Firewall Rules</button>
+      <button class="nav-tab-btn" onclick="showTab('dhcp', this)"><i class="fa-solid fa-network-wired"></i> DHCP Leases</button>
+      <button class="nav-tab-btn" onclick="showTab('vpn', this)"><i class="fa-solid fa-lock"></i> IPsec VPN</button>
+      <button class="nav-tab-btn" onclick="showTab('diagnostics', this)"><i class="fa-solid fa-terminal"></i> Diagnostics Ping</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="back-bar">
+      <a href="index.html" class="back-nav"><i class="fa-solid fa-arrow-left"></i> Volver al Portafolio Principal</a>
+      <div style="font-size:0.85rem;color:var(--text-muted)">
+        Hostname: <strong style="color:#fff">pfsense.altecel-opsu.internal</strong> | Admin: <strong style="color:var(--pfsense-green)">admin@10.0.10.1</strong>
+      </div>
+    </div>
+
+    <!-- TAB 1: DASHBOARD PRINCIPAL -->
+    <div id="tab-dashboard" class="tab-content">
+      <div class="widget-grid">
+        
+        <!-- Widget 1: System Information -->
+        <div class="widget-card">
+          <div class="widget-header">
+            <span><i class="fa-solid fa-server"></i> System Information</span>
+            <span class="status-up">Online (48d 12h)</span>
+          </div>
+          <div class="widget-body">
+            <table class="pfsense-table">
+              <tr>
+                <td><strong>Name / Host:</strong></td>
+                <td>pfsense.altecel-opsu.internal</td>
+              </tr>
+              <tr>
+                <td><strong>CPU Usage:</strong></td>
+                <td>
+                  Intel Xeon E3-1240 v6 @ 3.70GHz (12%)
+                  <div class="progress-bar"><div class="progress-fill" style="width:12%"></div></div>
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Memory Usage:</strong></td>
+                <td>
+                  2.8 GB / 16 GB (17.5%)
+                  <div class="progress-bar"><div class="progress-fill" style="width:17.5%"></div></div>
+                </td>
+              </tr>
+              <tr>
+                <td><strong>State Table:</strong></td>
+                <td>
+                  1,482 / 1,600,000 (0.1%)
+                  <div class="progress-bar"><div class="progress-fill" style="width:1%"></div></div>
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Temp / Hardware:</strong></td>
+                <td>38.0 °C (Supermicro X11SSH-F)</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+
+        <!-- Widget 2: Interfaces Status -->
+        <div class="widget-card">
+          <div class="widget-header">
+            <span><i class="fa-solid fa-ethernet"></i> Interfaces Status</span>
+            <button class="btn btn-green" style="padding:0.2rem 0.6rem;font-size:0.75rem" onclick="location.reload()">Refresh</button>
+          </div>
+          <div class="widget-body">
+            <table class="pfsense-table">
+              <thead>
+                <tr>
+                  <th>Interface</th>
+                  <th>IP Address</th>
+                  <th>Status</th>
+                  <th>Speed</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong style="color:var(--pfsense-accent)">WAN0 (Inter Fibra)</strong></td>
+                  <td>190.200.45.12/24</td>
+                  <td><span class="status-up">UP</span></td>
+                  <td>1000 Mbps</td>
+                </tr>
+                <tr>
+                  <td><strong style="color:var(--pfsense-amber)">WAN1 (NetUno Backup)</strong></td>
+                  <td>200.109.12.44/24</td>
+                  <td><span class="status-up">UP</span></td>
+                  <td>1000 Mbps</td>
+                </tr>
+                <tr>
+                  <td><strong>LAN_ADMIN (VLAN 10)</strong></td>
+                  <td>10.0.10.1/24</td>
+                  <td><span class="status-up">UP</span></td>
+                  <td>1000 Mbps</td>
+                </tr>
+                <tr>
+                  <td><strong>LAN_OPS (VLAN 20)</strong></td>
+                  <td>10.0.20.1/24</td>
+                  <td><span class="status-up">UP</span></td>
+                  <td>1000 Mbps</td>
+                </tr>
+                <tr>
+                  <td><strong>LAN_GUEST (VLAN 30)</strong></td>
+                  <td>10.0.30.1/24</td>
+                  <td><span class="status-up">UP</span></td>
+                  <td>1000 Mbps</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Widget 3: Real-Time Traffic & Firewall Syslog -->
+        <div class="widget-card" style="grid-column:1/-1">
+          <div class="widget-header">
+            <span><i class="fa-solid fa-list-check"></i> Real-Time Firewall Log Stream (Snort IPS Engine)</span>
+            <div style="display:flex;gap:0.5rem">
+              <button class="btn btn-red" style="padding:0.3rem 0.8rem;font-size:0.75rem" onclick="simTriggerAttack()">Simular Ataque DDoS Bloqueado</button>
+              <button class="btn btn-green" style="padding:0.3rem 0.8rem;font-size:0.75rem" onclick="simPassTraffic()">Simular Tráfico Seguro</button>
+            </div>
+          </div>
+          <div class="widget-body">
+            <div class="terminal-box" id="syslog">
+              <div class="terminal-line info">[PFSENSE_INIT]: Firewall Engine Snort v4.1 Filter Rules loaded</div>
+              <div class="terminal-line pass">[CARP_HA]: Master Node 10.0.10.1 STATUS: MASTER</div>
+              <div class="terminal-line pass">[DHCP_SERVER]: Subnet 10.0.20.0/24 active (48 active leases)</div>
+              <div class="terminal-line pass">[PFSENSE_LOG]: PASS IN on wan0: 190.200.45.12:443 -> 10.0.10.5:443 (HTTPS)</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- TAB 2: FIREWALL RULES -->
+    <div id="tab-firewall" class="tab-content" style="display:none">
+      <div class="widget-card">
+        <div class="widget-header">
+          <span><i class="fa-solid fa-shield-halved"></i> Firewall Rules (LAN_OPS & LAN_ADMIN)</span>
+          <button class="btn" onclick="alert('Regla agregada a la cadena de filtrado pfSense')">+ Add Rule</button>
+        </div>
+        <div class="widget-body">
+          <table class="pfsense-table">
+            <thead>
+              <tr>
+                <th>Action</th>
+                <th>Proto</th>
+                <th>Source</th>
+                <th>Port</th>
+                <th>Destination</th>
+                <th>Port</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="status-up">PASS</span></td>
+                <td>IPv4 TCP</td>
+                <td>LAN_ADMIN net</td>
+                <td>*</td>
+                <td>*</td>
+                <td>*</td>
+                <td>Acceso Total Administración Gerencia</td>
+              </tr>
+              <tr>
+                <td><span class="status-up">PASS</span></td>
+                <td>IPv4 TCP/UDP</td>
+                <td>LAN_OPS net</td>
+                <td>*</td>
+                <td>*</td>
+                <td>80, 443, 53</td>
+                <td>Permitir Web & DNS Operaciones</td>
+              </tr>
+              <tr>
+                <td><span class="status-down">BLOCK</span></td>
+                <td>IPv4 TCP</td>
+                <td>WAN0 net</td>
+                <td>*</td>
+                <td>LAN_ADMIN net</td>
+                <td>22, 3389</td>
+                <td>Bloquear Acceso Remoto SSH/RDP desde Internet</td>
+              </tr>
+              <tr>
+                <td><span class="status-down">BLOCK</span></td>
+                <td>IPv4 ICMP</td>
+                <td>LAN_GUEST net</td>
+                <td>*</td>
+                <td>10.0.10.0/24</td>
+                <td>*</td>
+                <td>Aislar Subred Visitantes de Red Interna</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: DHCP LEASES -->
+    <div id="tab-dhcp" class="tab-content" style="display:none">
+      <div class="widget-card">
+        <div class="widget-header">
+          <span><i class="fa-solid fa-network-wired"></i> DHCP Server Leases (Subnet 10.0.20.0/24)</span>
+          <button class="btn btn-green" onclick="simDhcpLease()">+ Asignar IP Estática</button>
+        </div>
+        <div class="widget-body">
+          <table class="pfsense-table" id="dhcp-table">
+            <thead>
+              <tr>
+                <th>IP Address</th>
+                <th>MAC Address</th>
+                <th>Hostname</th>
+                <th>Interface</th>
+                <th>Lease Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>10.0.20.102</td>
+                <td>e4:5f:01:94:82:11</td>
+                <td>DEV-WORKSTATION-01</td>
+                <td>LAN_OPS</td>
+                <td><span class="status-up">ACTIVE</span></td>
+              </tr>
+              <tr>
+                <td>10.0.20.105</td>
+                <td>b8:27:eb:44:12:90</td>
+                <td>PRINTER-GUATIRE-EPSON</td>
+                <td>LAN_OPS</td>
+                <td><span class="status-up">STATIC LEASE</span></td>
+              </tr>
+              <tr>
+                <td>10.0.20.142</td>
+                <td>a0:36:bc:88:10:45</td>
+                <td>EDWIN-LAPTOP-ALTECEL</td>
+                <td>LAN_OPS</td>
+                <td><span class="status-up">ACTIVE</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: IPSEC VPN -->
+    <div id="tab-vpn" class="tab-content" style="display:none">
+      <div class="widget-card">
+        <div class="widget-header">
+          <span><i class="fa-solid fa-lock"></i> IPsec & WireGuard VPN Status</span>
+          <button class="btn" onclick="alert('Túnel VPN reiniciado con éxito')">Restart Tunnels</button>
+        </div>
+        <div class="widget-body">
+          <table class="pfsense-table">
+            <thead>
+              <tr>
+                <th>Tunnel Name</th>
+                <th>Remote Gateway</th>
+                <th>Subnets</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>VPN-OPSU-CENTRAL</strong></td>
+                <td>190.202.10.45</td>
+                <td>10.0.10.0/24 ↔ 172.16.0.0/16</td>
+                <td><span class="status-up">CONNECTED (AES-256)</span></td>
+                <td><button class="btn btn-red" style="padding:0.2rem 0.5rem;font-size:0.75rem" onclick="alert('Túnel desconectado')">Disconnect</button></td>
+              </tr>
+              <tr>
+                <td><strong>VPN-ALTECEL-BRANCH</strong></td>
+                <td>200.44.88.12</td>
+                <td>10.0.20.0/24 ↔ 192.168.5.0/24</td>
+                <td><span class="status-up">CONNECTED (AES-256)</span></td>
+                <td><button class="btn btn-red" style="padding:0.2rem 0.5rem;font-size:0.75rem" onclick="alert('Túnel desconectado')">Disconnect</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 5: DIAGNOSTICS PING -->
+    <div id="tab-diagnostics" class="tab-content" style="display:none">
+      <div class="widget-card">
+        <div class="widget-header">
+          <span><i class="fa-solid fa-terminal"></i> pfSense Diagnostics - Ping & Traceroute Tool</span>
+        </div>
+        <div class="widget-body">
+          <div style="display:flex;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
+            <input type="text" id="ping-host" value="8.8.8.8" style="background:#070b14;border:1px solid var(--pfsense-border);color:#fff;padding:0.6rem;border-radius:8px;font-family:'JetBrains Mono',monospace;width:250px" placeholder="Host o IP (ej. 8.8.8.8)">
+            <button class="btn btn-green" onclick="executePing()">Execute Ping</button>
+          </div>
+          <div class="terminal-box" id="ping-output">
+            [DIAGNOSTICS]: Ingrese una IP o Host y presione "Execute Ping"
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    function showTab(tabName, btn) {
+      document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+      document.querySelectorAll('.nav-tab-btn').forEach(b => b.classList.remove('active'));
+      
+      const target = document.getElementById(`tab-${tabName}`);
+      if (target) target.style.display = 'block';
+      if (btn) btn.classList.add('active');
+    }
+
+    function logSyslog(msg, type = 'info') {
+      const term = document.getElementById('syslog');
+      if (!term) return;
+      const time = new Date().toLocaleTimeString();
+      const div = document.createElement('div');
+      div.className = `terminal-line ${type}`;
+      div.innerHTML = `[${time}] ${msg}`;
+      term.appendChild(div);
+      term.scrollTop = term.scrollHeight;
+    }
+
+    function simTriggerAttack() {
+      const ip = `185.220.${Math.floor(Math.random()*200)}.${Math.floor(Math.random()*200)}`;
+      logSyslog(`[SNORT_ALERT]: BLOCK IN on wan0: ${ip}:22 -> DROP (PORT SCANNER DETECTED)`, 'block');
+    }
+
+    function simPassTraffic() {
+      logSyslog(`[PFSENSE_PASS]: PASS IN on wan0: 190.200.45.12:443 -> 10.0.10.5:443 (HTTPS)`, 'pass');
+    }
+
+    function simDhcpLease() {
+      const tbody = document.querySelector('#dhcp-table tbody');
+      const ip = `10.0.20.${Math.floor(Math.random()*100 + 150)}`;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${ip}</td>
+        <td>e4:5f:${Math.floor(10+Math.random()*80)}:94:82:${Math.floor(10+Math.random()*80)}</td>
+        <td>NEW-HOST-PC</td>
+        <td>LAN_OPS</td>
+        <td><span class="status-up">STATIC LEASE</span></td>
+      `;
+      tbody.appendChild(tr);
+      logSyslog(`[DHCP_SERVER]: Static Lease created for ${ip} (NEW-HOST-PC)`, 'pass');
+      showTab('dhcp', document.querySelectorAll('.nav-tab-btn')[2]);
+    }
+
+    function executePing() {
+      const host = document.getElementById('ping-host').value || '8.8.8.8';
+      const output = document.getElementById('ping-output');
+      output.innerHTML = `[PING_START]: PING ${host} (56 data bytes)...<br>`;
+      
+      let count = 0;
+      const interval = setInterval(() => {
+        count++;
+        const time = (Math.random() * 4 + 2).toFixed(2);
+        output.innerHTML += `64 bytes from ${host}: icmp_seq=${count} ttl=118 time=${time} ms<br>`;
+        output.scrollTop = output.scrollHeight;
+
+        if (count >= 4) {
+          clearInterval(interval);
+          output.innerHTML += `<br>--- ${host} ping statistics ---<br>4 packets transmitted, 4 received, 0% packet loss, time 3004ms<br>rtt min/avg/max/mdev = 2.12/3.45/5.10/0.82 ms`;
+        }
+      }, 600);
+    }
+  </script>
+</body>
+</html>
