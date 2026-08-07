@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RS Performance - Simulación de Checkout & Carrito en Vivo | SAP Business One</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <style>
+        :root {
+            --primary: #00d2ff;
+            --primary-dark: #0099cc;
+            --bg-dark: #0b0f19;
+            --bg-card: #161f31;
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+            --border: rgba(255, 255, 255, 0.1);
+            --success: #10b981;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
+        body { background-color: var(--bg-dark); color: var(--text-main); line-height: 1.5; padding-bottom: 3rem; }
+
+        header {
+            background: rgba(11, 15, 25, 0.9);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+            position: sticky; top: 0; z-index: 100;
+            padding: 1rem 5%;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        .logo { font-size: 1.5rem; font-weight: 800; color: #fff; text-transform: uppercase; letter-spacing: 1px; text-decoration: none; display: flex; align-items: center; gap: 8px; }
+        .logo span { color: var(--primary); }
+
+        .cart-badge-btn {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: #fff;
+            padding: 0.6rem 1.2rem;
+            border-radius: 30px;
+            cursor: pointer;
+            display: flex; align-items: center; gap: 0.6rem;
+            font-weight: 600; position: relative;
+        }
+
+        .badge-count {
+            background: var(--primary); color: #000;
+            font-size: 0.75rem; font-weight: 800;
+            width: 20px; height: 20px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        .rates-bar {
+            background: #080c16; border-bottom: 1px solid var(--border);
+            padding: 0.8rem 5%; font-size: 0.85rem; color: var(--text-muted);
+            display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;
+        }
+        .rate-tag { background: rgba(255,255,255,0.05); padding: 0.3rem 0.6rem; border-radius: 6px; color: var(--primary); font-weight: 700; }
+
+        .container { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
+        .back-nav { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--primary); text-decoration: none; font-weight: 700; margin-bottom: 1.5rem; background: rgba(0,210,255,0.1); padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid rgba(0,210,255,0.2); }
+
+        .main-grid { display: grid; grid-template-columns: 1.8fr 1.2fr; gap: 2rem; }
+
+        @media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
+        @media (max-width: 600px) {
+          header { padding: 0.8rem 1rem; flex-direction: column; gap: 0.8rem; text-align: center; }
+          .main-grid { grid-template-columns: 1fr !important; }
+          .product-grid { grid-template-columns: 1fr !important; }
+          div[style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
+          .rates-bar { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+          .modal-content { width: 95% !important; padding: 1.2rem !important; }
+        }
+
+        .card {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 16px; padding: 1.5rem; margin-bottom: 1.5rem;
+        }
+
+        .card-title { font-size: 1.25rem; font-weight: 700; margin-bottom: 1rem; color: var(--primary); display: flex; align-items: center; gap: 0.5rem; }
+
+        .product-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.2rem; }
+
+        .product-card {
+            background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+            border-radius: 12px; padding: 1rem; transition: transform 0.2s;
+        }
+        .product-card:hover { transform: translateY(-4px); border-color: var(--primary); }
+
+        .product-img {
+            width: 100%; height: 160px; background: #1e293b; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center; font-size: 3rem; color: var(--primary);
+            margin-bottom: 0.8rem;
+        }
+
+        .product-name { font-weight: 700; font-size: 1rem; margin-bottom: 0.3rem; }
+        .product-price { font-size: 1.1rem; color: var(--primary); font-weight: 800; margin-bottom: 0.2rem; }
+        .product-price-ves { font-size: 0.8rem; color: var(--success); font-weight: 700; margin-bottom: 0.8rem; }
+
+        .btn {
+            width: 100%; background: var(--primary); color: #000; border: none;
+            padding: 0.75rem; border-radius: 8px; font-weight: 700; cursor: pointer;
+            transition: opacity 0.2s; display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+        }
+        .btn:hover { opacity: 0.9; }
+
+        .cart-item { display: flex; justify-content: space-between; align-items: center; padding: 0.8rem 0; border-bottom: 1px solid var(--border); }
+        .cart-item:last-child { border-bottom: none; }
+
+        .item-details h4 { font-size: 0.95rem; }
+        .item-details p { font-size: 0.85rem; color: var(--text-muted); }
+
+        .item-qty { display: flex; align-items: center; gap: 0.5rem; }
+        .qty-btn { background: rgba(255,255,255,0.1); border: none; color: #fff; width: 24px; height: 24px; border-radius: 4px; cursor: pointer; }
+
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.4rem; }
+        .form-control {
+            width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border);
+            padding: 0.75rem; border-radius: 8px; color: #fff; font-size: 0.95rem;
+        }
+        .form-control:focus { border-color: var(--primary); outline: none; }
+
+        .summary-row { display: flex; justify-content: space-between; margin-bottom: 0.6rem; font-size: 0.95rem; }
+        .summary-row.total { font-size: 1.25rem; font-weight: 800; color: #fff; border-top: 1px solid var(--border); padding-top: 0.8rem; margin-top: 0.8rem; }
+
+        .terminal-box { background: #050810; border: 1px solid #1e293b; border-radius: 12px; padding: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #38bdf8; min-height: 200px; max-height: 280px; overflow-y: auto; line-height: 1.6; }
+        .terminal-line.success { color: var(--success); font-weight: 700; }
+        .terminal-line.warn { color: #f59e0b; }
+
+        .modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); backdrop-filter: blur(8px); z-index: 1000;
+            align-items: center; justify-content: center;
+        }
+        .modal-content {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 20px;
+            max-width: 500px; width: 90%; padding: 2rem; text-align: center;
+        }
+        .success-icon { font-size: 4rem; color: var(--success); margin-bottom: 1rem; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <a href="index.html" class="logo">RS <span>Performance</span></a>
+        <button class="cart-badge-btn" onclick="scrollToCart()">
+            <i class="fa-solid fa-cart-shopping"></i> Carrito
+            <div class="badge-count" id="cartCount">0</div>
+        </button>
+    </header>
+
+    <div class="rates-bar">
+        <div>💵 Tasa BCV Oficial: <span class="rate-tag" id="rate-bcv">36.50 Bs/$</span></div>
+        <div>📊 Binance P2P: <span class="rate-tag">38.20 Bs/$</span></div>
+        <div>🟢 Estado SAP: <span class="rate-tag" style="color:var(--success)">Conectado (Service Layer v10.0)</span></div>
+    </div>
+
+    <div class="container">
+        <a href="index.html" class="back-nav"><i class="fa-solid fa-arrow-left"></i> Volver al Portafolio Principal</a>
+
+        <div class="main-grid">
+            
+            <!-- Catalogo & Formulario -->
+            <div>
+                <div class="card">
+                    <div class="card-title"><i class="fa-solid fa-shirt"></i> Catálogo de Productos RS Performance</div>
+                    <div class="product-grid">
+                        
+                        <div class="product-card">
+                            <div class="product-img"><i class="fa-solid fa-baseball-bat-ball"></i></div>
+                            <div class="product-name">Camisa Tiburones Home</div>
+                            <div class="product-price">$45.99 USD</div>
+                            <div class="product-price-ves" id="p1-ves">1,678.63 Bs.</div>
+                            <button class="btn" onclick="addToCart('Camisa Tiburones Home', 45.99)"><i class="fa-solid fa-cart-plus"></i> Agregar</button>
+                        </div>
+
+                        <div class="product-card">
+                            <div class="product-img"><i class="fa-solid fa-shoe-prints"></i></div>
+                            <div class="product-name">Zapatillas Fortaleza Turf</div>
+                            <div class="product-price">$39.99 USD</div>
+                            <div class="product-price-ves" id="p2-ves">1,459.63 Bs.</div>
+                            <button class="btn" onclick="addToCart('Zapatillas Fortaleza Turf', 39.99)"><i class="fa-solid fa-cart-plus"></i> Agregar</button>
+                        </div>
+
+                        <div class="product-card">
+                            <div class="product-img"><i class="fa-solid fa-vest"></i></div>
+                            <div class="product-name">Top Rhea Dama</div>
+                            <div class="product-price">$15.98 USD</div>
+                            <div class="product-price-ves" id="p3-ves">583.27 Bs.</div>
+                            <button class="btn" onclick="addToCart('Top Rhea Dama', 15.98)"><i class="fa-solid fa-cart-plus"></i> Agregar</button>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title"><i class="fa-solid fa-truck-fast"></i> Datos de Envío y Facturación</div>
+                    <form id="checkoutForm" onsubmit="processOrder(event)">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                            <div class="form-group">
+                                <label>Nombre Completo</label>
+                                <input type="text" class="form-control" id="cust-name" required value="Edwin Colmenares">
+                            </div>
+                            <div class="form-group">
+                                <label>Cédula de Identidad</label>
+                                <input type="text" class="form-control" id="cust-id" required value="V-28014996">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Correo Electrónico</label>
+                            <input type="email" class="form-control" id="cust-email" required value="edwinjosecolmenares28@hotmail.com">
+                        </div>
+                        <div class="form-group">
+                            <label>Dirección de Envío</label>
+                            <input type="text" class="form-control" id="cust-addr" required value="Guatire, Valle Arriba, Miranda">
+                        </div>
+                        <div class="form-group">
+                            <label>Método de Pago (Verificación en SAP)</label>
+                            <select class="form-control" id="paymentMethod">
+                                <option value="Pago Móvil / Transferencia (Banplus/BDV)">Pago Móvil / Transferencia (Bs. - Banplus / BDV)</option>
+                                <option value="Zinli / Binance Pay (USDT)">Zinli / Binance Pay (USDT)</option>
+                                <option value="Tarjeta Internacional">Tarjeta de Crédito Internacional</option>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Resumen de Compra & Consola SAP -->
+            <div>
+                <div id="cartSection">
+                    <div class="card">
+                        <div class="card-title"><i class="fa-solid fa-receipt"></i> Resumen de Compra</div>
+                        <div id="cartItemsList">
+                            <p style="color: var(--text-muted); text-align: center; padding: 1.5rem 0;">Tu carrito está vacío.</p>
+                        </div>
+
+                        <div style="margin-top: 1.5rem;">
+                            <div class="summary-row"><span>Subtotal ($USD)</span><span id="subtotal">$0.00</span></div>
+                            <div class="summary-row"><span>Envío</span><span id="shipping">$0.00</span></div>
+                            <div class="summary-row"><span>Convertido a Bolívares (BCV)</span><span id="totalVes" style="color:var(--success);font-weight:700">0.00 Bs.</span></div>
+                            <div class="summary-row total"><span>Total General</span><span id="total">$0.00</span></div>
+                        </div>
+
+                        <button class="btn" id="btn-submit" style="margin-top: 1.5rem; height: 50px;" onclick="document.getElementById('checkoutForm').requestSubmit()">
+                            <i class="fa-solid fa-lock"></i> Procesar y Validar Compra en SAP
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Consola de Monitor SAP -->
+                <div class="card">
+                    <div class="card-title"><i class="fa-solid fa-terminal"></i> Consola API REST SAP Business One</div>
+                    <div class="terminal-box" id="terminal">
+                        <div class="terminal-line">[SYSTEM_INIT]: Servidor Node.js / Middleware SAP Online</div>
+                        <div class="terminal-line">[SAP_HANA]: Conexión con base de datos RS21_PROD (Port 8000)</div>
+                        <div class="terminal-line">[RATES]: Tasa BCV Oficial: 36.50 Bs/$</div>
+                        <div class="terminal-line">[READY]: Esperando productos en carrito...</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Modal Confirmacion -->
+    <div class="modal" id="successModal">
+        <div class="modal-content">
+            <div class="success-icon"><i class="fa-solid fa-circle-check"></i></div>
+            <h2>¡Orden Procesada con Éxito!</h2>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-top:0.8rem;" id="modalDetails"></p>
+            <button class="btn" style="margin-top:1.5rem;" onclick="closeModal()">Aceptar y Reiniciar Demo</button>
+        </div>
+    </div>
+
+    <script>
+        let cart = [];
+        const bcvRate = 36.50;
+
+        function addToCart(name, price) {
+            const existing = cart.find(item => item.name === name);
+            if(existing) { existing.qty++; } else { cart.push({ name, price, qty: 1 }); }
+            updateCartUI();
+            logTerminal(`[ITEM_ADDED]: "${name}" x1 ($${price.toFixed(2)} USD)`, 'info');
+        }
+
+        function updateQty(name, delta) {
+            const item = cart.find(i => i.name === name);
+            if(item) {
+                item.qty += delta;
+                if(item.qty <= 0) { cart = cart.filter(i => i.name !== name); }
+            }
+            updateCartUI();
+        }
+
+        function updateCartUI() {
+            const list = document.getElementById('cartItemsList');
+            let totalQty = 0, sub = 0;
+
+            if(cart.length === 0) {
+                list.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 1.5rem 0;">Tu carrito está vacío.</p>`;
+            } else {
+                list.innerHTML = cart.map(item => {
+                    totalQty += item.qty;
+                    sub += item.price * item.qty;
+                    return `
+                        <div class="cart-item">
+                            <div class="item-details">
+                                <h4>${item.name}</h4>
+                                <p>$${item.price.toFixed(2)} c/u</p>
+                            </div>
+                            <div class="item-qty">
+                                <button class="qty-btn" onclick="updateQty('${item.name}', -1)">-</button>
+                                <span>${item.qty}</span>
+                                <button class="qty-btn" onclick="updateQty('${item.name}', 1)">+</button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            const shippingFee = cart.length > 0 ? 5.00 : 0.00;
+            const totalUsd = sub + shippingFee;
+            const totalVes = totalUsd * bcvRate;
+
+            document.getElementById('cartCount').innerText = totalQty;
+            document.getElementById('subtotal').innerText = `$${sub.toFixed(2)}`;
+            document.getElementById('shipping').innerText = `$${shippingFee.toFixed(2)}`;
+            document.getElementById('total').innerText = `$${totalUsd.toFixed(2)}`;
+            document.getElementById('totalVes').innerText = `${totalVes.toLocaleString('es-VE', {minimumFractionDigits: 2})} Bs.`;
+        }
+
+        function logTerminal(msg, type = 'info') {
+            const term = document.getElementById('terminal');
+            const time = new Date().toLocaleTimeString();
+            const div = document.createElement('div');
+            div.className = `terminal-line ${type}`;
+            div.innerHTML = `[${time}] ${msg}`;
+            term.appendChild(div);
+            term.scrollTop = term.scrollHeight;
+        }
+
+        function processOrder(e) {
+            e.preventDefault();
+            if(cart.length === 0) { alert('Añade al menos un producto al carrito antes de procesar.'); return; }
+
+            const btn = document.getElementById('btn-submit');
+            const name = document.getElementById('cust-name').value;
+            const id = document.getElementById('cust-id').value;
+            const payment = document.getElementById('paymentMethod').value;
+            const totalUsdStr = document.getElementById('total').innerText;
+            const totalVesStr = document.getElementById('totalVes').innerText;
+            const orderId = `#RS-${Math.floor(100000 + Math.random() * 900000)}`;
+
+            btn.disabled = true;
+            btn.innerText = '⏳ Conectando con SAP HANA Database...';
+
+            logTerminal(`[CHECKOUT_TRIGGER]: Iniciando proceso para ${name} (${id})`, 'info');
+            
+            setTimeout(() => {
+                logTerminal(`[GATEWAY_VALIDATION]: Verificando método: ${payment}...`, 'warn');
+            }, 600);
+
+            setTimeout(() => {
+                logTerminal(`[GATEWAY_OK]: Pago por ${totalUsdStr} (${totalVesStr}) APROBADO!`, 'success');
+            }, 1400);
+
+            setTimeout(() => {
+                logTerminal(`[SAP_SERVICE_LAYER]: POST https://sap.rs21.com:50000/b1s/v1/Orders`, 'info');
+                logTerminal(`[SAP_ORDR_SUCCESS]: Pedido de Venta ${orderId} creado en SAP!`, 'success');
+                logTerminal(`[SAP_INVENTORY]: Stock actualizado en sucursal RS21 Guatire`, 'success');
+
+                document.getElementById('modalDetails').innerHTML = `
+                    Número de Orden SAP: <strong>${orderId}</strong><br>
+                    Cliente: <strong>${name} (${id})</strong><br>
+                    Monto Total: <strong>${totalUsdStr} USD (${totalVesStr})</strong><br>
+                    Método Seleccionado: <strong>${payment}</strong><br>
+                    <span style="color:var(--success);font-weight:700"> Asiento de Cobro & Factura Creada en SAP</span>
+                `;
+                document.getElementById('successModal').style.display = 'flex';
+                btn.disabled = false;
+                btn.innerText = 'Procesar y Validar Compra en SAP';
+            }, 2400);
+        }
+
+        function closeModal() {
+            cart = []; 
+            updateCartUI();
+            document.getElementById('successModal').style.display = 'none';
+            logTerminal('[SYSTEM]: Sesión reiniciada. Carrito en espera...', 'info');
+        }
+
+        function scrollToCart() {
+            document.getElementById('cartSection').scrollIntoView({ behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>
