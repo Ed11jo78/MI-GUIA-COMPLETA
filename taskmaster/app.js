@@ -61,13 +61,22 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function loadAll() {
-  APP.tasks      = fromLS('ejcp_tasks',      sampleTasks());
-  APP.tickets    = fromLS('ejcp_tickets',    sampleTickets());
-  APP.network    = fromLS('ejcp_network',    sampleNetwork());
-  APP.economy    = fromLS('ejcp_economy',    sampleEconomy());
+  APP.tasks      = fromLS('ejcp_tasks',      []);
+  APP.tickets    = fromLS('ejcp_tickets',    []);
+  APP.network    = fromLS('ejcp_network',    []);
+  APP.economy    = fromLS('ejcp_economy',    []);
+  APP.debts      = fromLS('ejcp_debts',      []);
   APP.portfolio  = fromLS('ejcp_portfolio',  []);
   APP.activities = fromLS('ejcp_activities', []);
-  APP.profile    = fromLS('ejcp_profile',    { name: 'EJCP', status: '🟢 En línea', avatar: null });
+  APP.profile    = fromLS('ejcp_profile',    { name: 'Edwin José Colmenares Pacheco', status: '🟢 En línea', avatar: null });
+
+  const isCleared = fromLS('ejcp_cleared', false);
+  if (!isCleared && !APP.tasks.length && !APP.tickets.length && !APP.economy.length) {
+    APP.tasks   = typeof sampleTasks   === 'function' ? sampleTasks()   : [];
+    APP.tickets = typeof sampleTickets === 'function' ? sampleTickets() : [];
+    APP.network = typeof sampleNetwork === 'function' ? sampleNetwork() : [];
+    APP.economy = typeof sampleEconomy === 'function' ? sampleEconomy() : [];
+  }
 
   APP.rateBCV    = fromLS('ejcp_rate_bcv',    36.50);
   APP.rateEUR    = fromLS('ejcp_rate_eur',    39.80);
@@ -100,7 +109,14 @@ function saveAll() {
 }
 
 function fromLS(key, def) {
-  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def; } catch { return def; }
+  try {
+    const v = localStorage.getItem(key);
+    if (!v || v === 'null' || v === 'undefined') return def;
+    const parsed = JSON.parse(v);
+    return (parsed !== null && parsed !== undefined) ? parsed : def;
+  } catch {
+    return def;
+  }
 }
 function toLS(key, val) {
   try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
@@ -302,8 +318,8 @@ function fmtDateShort(dateStr) {
 }
 
 function escH(str) {
-  if (!str) return '';
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function calcDuration(start, end) {
@@ -384,11 +400,33 @@ function renderDashboard() {
   set('d-net-month', netThisMonth.length);
   set('d-net-hours', `${netHours.toFixed(1)}h caídas`);
 
-  // Economy
-  const balance = APP.economy.reduce((s, t) => s + (t.type === 'ingreso' ? t.amount : -t.amount), 0);
-  const balVes  = balance * APP.rate;
-  set('d-balance', `$${balance.toFixed(2)}`);
-  set('d-balance-bs', `Bs. ${balVes.toLocaleString('es-VE', { maximumFractionDigits: 2 })}`);
+  // Economy & Total Liquid Assets
+  const econSum = APP.economy.reduce((s, t) => {
+    const type = String(t.type || 'ingreso').toLowerCase();
+    const amt  = parseFloat(t.amount || 0) || 0;
+    if (type === 'ingreso') return s + amt;
+    if (type === 'egreso') return s - amt;
+    return s;
+  }, 0);
+
+  const accs = fromLS('ejcp_accounts', {});
+  const rate = APP.rateBCV || APP.rate || 755.9;
+  let totalAccountsUsd = 0;
+  if (accs && Object.keys(accs).length) {
+    Object.entries(accs).forEach(([k, a]) => {
+      if (k === 'bolivares') {
+        totalAccountsUsd += (a.balance || 0) / (rate > 0 ? rate : 1);
+      } else {
+        totalAccountsUsd += (a.balance || 0);
+      }
+    });
+  }
+
+  const finalBalanceUsd = Math.max(econSum, totalAccountsUsd);
+  const finalBalanceVes = finalBalanceUsd * rate;
+
+  set('d-balance', `$${finalBalanceUsd.toFixed(2)}`);
+  set('d-balance-bs', `Bs. ${finalBalanceVes.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 
   // Activity feed
   buildActivityFeed();
@@ -3077,18 +3115,33 @@ function deleteEconTx(id) {
 
 function updateEconBalance() {
   const accs    = getAccounts();
-  const income  = APP.economy.filter(t => t.type==='ingreso').reduce((s, t) => s + t.amount, 0);
-  const expense = APP.economy.filter(t => t.type==='egreso').reduce((s, t) => s + t.amount, 0);
-  const balance = income - expense;
-  const rate    = APP.rate;
+  const rate    = APP.rateBCV || APP.rate || 755.9;
+
+  const income  = APP.economy.filter(t => t.type==='ingreso').reduce((s, t) => s + parseFloat(t.amount || 0), 0);
+  const expense = APP.economy.filter(t => t.type==='egreso' || t.type==='pago_movil').reduce((s, t) => s + parseFloat(t.amount || 0), 0);
+
+  let totalAccountsUsd = 0;
+  if (accs && Object.keys(accs).length) {
+    Object.entries(accs).forEach(([k, a]) => {
+      const bal = parseFloat(a.balance || 0);
+      if (k === 'bolivares') {
+        totalAccountsUsd += bal / (rate > 0 ? rate : 1);
+      } else {
+        totalAccountsUsd += bal;
+      }
+    });
+  }
+
+  const realBalanceUSD = Math.max(income - expense, totalAccountsUsd);
+  const realBalanceVES = realBalanceUSD * rate;
 
   const s = (id, v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
   s('econ-income-usd',  fmtUSD(income));
   s('econ-income-ves',  fmtBs(income * rate));
   s('econ-expense-usd', fmtUSD(expense));
   s('econ-expense-ves', fmtBs(expense * rate));
-  s('econ-balance-usd', fmtUSD(balance));
-  s('econ-balance-ves', fmtBs(balance * rate));
+  s('econ-balance-usd', fmtUSD(realBalanceUSD));
+  s('econ-balance-ves', fmtBs(realBalanceVES));
 }
 
 function esc(s) {
@@ -3719,25 +3772,175 @@ function getExportDateFilter() {
   const toVal   = (document.getElementById('export-date-to')?.value || '').trim();
   return {
     from: fromVal ? new Date(fromVal + 'T00:00:00') : null,
-    to:   toVal   ? new Date(toVal   + 'T23:59:59') : null
+    to:   toVal   ? new Date(toVal + 'T23:59:59') : null
   };
 }
 
-function applyDateFilter(list, dateField) {
-  const { from, to } = getExportDateFilter();
-  if (!from && !to) return list;
-  return (list || []).filter(item => {
-    const raw = item[dateField] || '';
-    if (!raw) return true; // sin fecha → incluir siempre
-    const d = new Date(raw);
-    if (from && d < from) return false;
-    if (to   && d > to)   return false;
-    return true;
-  });
+function getVal(row, keys, fallback = '') {
+  if (!row || typeof row !== 'object') return fallback;
+  const rowKeys = Object.keys(row);
+  for (const k of keys) {
+    if (row[k] !== undefined && row[k] !== null && row[k] !== '') return row[k];
+    const cleanK = k.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[_ ]/g, '');
+    const foundKey = rowKeys.find(rk => {
+      const cleanRK = rk.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[_ ]/g, '');
+      return cleanRK === cleanK;
+    });
+    if (foundKey && row[foundKey] !== undefined && row[foundKey] !== null && row[foundKey] !== '') {
+      return row[foundKey];
+    }
+  }
+  return fallback;
+}
+
+function parseTags(val) {
+  if (Array.isArray(val)) return val.map(v => String(v).trim()).filter(Boolean);
+  if (!val) return [];
+  return String(val).split(/[,;]/).map(v => v.trim()).filter(Boolean);
+}
+
+function parseBoolean(val) {
+  if (typeof val === 'boolean') return val;
+  if (!val) return false;
+  const s = String(val).trim().toUpperCase();
+  return ['SI', 'YES', 'TRUE', '1', 'HECHO', 'COMPLETADA', 'CERRADO', 'VERDADERO'].includes(s);
+}
+
+function format24hTime(val) {
+  if (!val) return '09:00';
+  if (val instanceof Date) {
+    const hh = String(val.getHours()).padStart(2, '0');
+    const mm = String(val.getMinutes()).padStart(2, '0');
+    return `${hh}:${mm}`;
+  }
+  const s = String(val).trim();
+  const m = s.match(/(\d{1,2}):(\d{2})/);
+  if (m) {
+    const hh = String(Math.min(23, parseInt(m[1], 10))).padStart(2, '0');
+    const mm = String(Math.min(59, parseInt(m[2], 10))).padStart(2, '0');
+    return `${hh}:${mm}`;
+  }
+  return '09:00';
+}
+
+function safeDateISO(val) {
+  if (!val) return new Date().toISOString();
+  if (val instanceof Date) return val.toISOString();
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+}
+
+function safeDateStr(val) {
+  if (!val) return toLocalDate(new Date());
+  if (val instanceof Date) return toLocalDate(val);
+  const s = String(val).trim();
+  if (s.length >= 10) return s.substring(0, 10);
+  return s;
+}
+
+function resolveAccountKey(name) {
+  if (!name) return 'binance';
+  const s = String(name).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  if (s.includes('zinli')) return 'zinli';
+  if (s.includes('airtm') || s.includes('air tm') || s.includes('air_tm')) return 'airtm';
+  if (s.includes('binance') || s.includes('usdt') || s.includes('binan')) return 'binance';
+  if (s.includes('bolivar') || s.includes('ves') || s.includes('bs') || s.includes('pago movil') || s.includes('banco') || s.includes('banesco') || s.includes('mercantil') || s.includes('provincial')) return 'bolivares';
+  if (s.includes('efectivo') || s.includes('cash') || s.includes('dolar') || s.includes('usd')) return 'efectivo';
+  return 'binance';
 }
 
 // ═══════════════════════════════════════════
-//  EXPORTACIÓN EXCEL — CON FILTRO DE FECHAS
+//  SINCRONIZACIÓN Y RECÁLCULO EXACTO DE SALDOS DE CUENTAS (AIRTM, ZINLI, BINANCE, BOLÍVARES, EFECTIVO)
+// ═══════════════════════════════════════════
+
+function syncAccountBalancesFromEconomy() {
+  const curAccs = fromLS('ejcp_accounts', {
+    binance:   { name: 'Binance',   cur: 'USDT', emoji: '🟡', balance: 0, baseBalance: 0 },
+    airtm:     { name: 'AIRTM',    cur: 'USD',  emoji: '💙', balance: 0, baseBalance: 0 },
+    zinli:     { name: 'Zinli',    cur: 'USD',  emoji: '🟣', balance: 0, baseBalance: 0 },
+    bolivares: { name: 'Bolívares', cur: 'VES',  emoji: '🇻🇪', balance: 0, baseBalance: 0 },
+    efectivo:  { name: 'Efectivo', cur: 'USD',  emoji: '💵', balance: 0, baseBalance: 0 }
+  });
+
+  const accs = JSON.parse(JSON.stringify(curAccs));
+  Object.keys(accs).forEach(k => {
+    if (!accs[k]) {
+      accs[k] = { name: k, balance: 0, baseBalance: 0 };
+    } else {
+      const base = accs[k].baseBalance !== undefined ? parseFloat(accs[k].baseBalance || 0) : (accs[k].initialBalance !== undefined ? parseFloat(accs[k].initialBalance || 0) : 0);
+      accs[k].balance = base;
+      accs[k].baseBalance = base;
+    }
+  });
+
+  const econ = fromLS('ejcp_economy', []);
+  const rate = APP.rateBCV || APP.rate || 755.9;
+
+  econ.forEach(t => {
+    const amtSent    = parseFloat(t.amount || 0) || 0;
+    const amtArrived = parseFloat(t.arrives || t.amount || 0) || 0;
+    const vesSent    = parseFloat(t.amountVes || 0) || (amtSent * rate);
+    const vesArrived = amtArrived * rate;
+    const type       = String(t.type || 'ingreso').toLowerCase();
+
+    if (type === 'ingreso' || type === 'deposito' || type === 'cobro' || type === 'abono') {
+      const targetKey = resolveAccountKey(t.account || t.dest || t.origin || t.fromAccount || 'binance');
+      if (accs[targetKey]) {
+        const delta = targetKey === 'bolivares' ? (vesArrived || vesSent) : amtArrived;
+        accs[targetKey].balance = parseFloat((accs[targetKey].balance + delta).toFixed(2));
+      }
+    } else if (type === 'egreso' || type === 'gasto' || type === 'pago' || type === 'pago_movil' || type === 'compra' || type === 'salida') {
+      const sourceKey = resolveAccountKey(t.fromAccount || t.origin || t.account || 'binance');
+      if (accs[sourceKey]) {
+        const delta = sourceKey === 'bolivares' ? vesSent : amtSent;
+        accs[sourceKey].balance = parseFloat((accs[sourceKey].balance - delta).toFixed(2));
+      }
+    } else if (type === 'zinli') {
+      const sourceKey = resolveAccountKey(t.fromAccount || t.origin || t.account || 'binance');
+      const destKey   = 'zinli';
+      if (accs[sourceKey]) {
+        const deltaSrc = sourceKey === 'bolivares' ? vesSent : amtSent;
+        accs[sourceKey].balance = parseFloat((accs[sourceKey].balance - deltaSrc).toFixed(2));
+      }
+      if (accs[destKey]) {
+        accs[destKey].balance = parseFloat((accs[destKey].balance + amtArrived).toFixed(2));
+      }
+    } else if (type === 'traslado' || type === 'transferencia') {
+      const sourceKey = resolveAccountKey(t.fromAccount || t.origin || 'binance');
+      const destKey   = resolveAccountKey(t.toAccount || t.dest || 'airtm');
+      if (accs[sourceKey]) {
+        const deltaSrc = sourceKey === 'bolivares' ? vesSent : amtSent;
+        accs[sourceKey].balance = parseFloat((accs[sourceKey].balance - deltaSrc).toFixed(2));
+      }
+      if (destKey && destKey !== sourceKey && accs[destKey]) {
+        const deltaDst = destKey === 'bolivares' ? vesArrived : amtArrived;
+        accs[destKey].balance = parseFloat((accs[destKey].balance + deltaDst).toFixed(2));
+      }
+    }
+  });
+
+  toLS('ejcp_accounts', accs);
+}
+
+// Fallback seguro global para renderDatabaseSummary
+if (typeof window !== 'undefined' && typeof window.renderDatabaseSummary !== 'function') {
+  window.renderDatabaseSummary = function() {
+    if (typeof renderDashboard === 'function') renderDashboard();
+  };
+}
+
+function safeUIRefresh() {
+  if (typeof renderDatabaseSummary === 'function') {
+    renderDatabaseSummary();
+  } else if (typeof renderDashboard === 'function') {
+    renderDashboard();
+  } else if (typeof updateDashboard === 'function') {
+    updateDashboard();
+  }
+}
+
+// ═══════════════════════════════════════════
+//  EXPORTACIÓN EXCEL — COMPLETA (TODOS LOS MÓDULOS Y CUENTAS)
 // ═══════════════════════════════════════════
 
 function exportSystemDataExcel() {
@@ -3753,37 +3956,98 @@ function exportSystemDataExcel() {
 
   const wb = XLSX.utils.book_new();
 
-  // 1. Configuración & Perfil General (sin filtro de fecha)
+  // 1. Configuración & Perfil General con Saldos Iniciales de Cuentas
   const profile = fromLS('taskmaster_profile', {});
+  const accs    = fromLS('ejcp_accounts', {});
+
   const configData = [{
     Usuario:         profile.name     || 'Edwin José Colmenares Pacheco',
     Email:           profile.email    || 'edwinjosecolmenares28@hotmail.com',
     Telefono:        profile.phone    || '+58 (0414) 135-6815',
     Ubicacion:       profile.location || 'Guatire, Miranda',
-    Tasa_BCV:        APP.rateBCV      || 36.50,
-    Tasa_Binance:    APP.rateBinance  || 38.20,
-    Tasa_Airtm:      APP.rateAirtm    || 38.10,
+    Tasa_BCV:        APP.rateBCV      || 755.90,
+    Tasa_Binance:    APP.rateBinance  || 755.90,
+    Tasa_Airtm:      APP.rateAirtm    || 755.90,
+    Saldo_Binance:   accs.binance   ? (accs.binance.baseBalance   ?? accs.binance.balance)   : 0,
+    Saldo_AIRTM:     accs.airtm     ? (accs.airtm.baseBalance     ?? accs.airtm.balance)     : 0,
+    Saldo_Zinli:     accs.zinli     ? (accs.zinli.baseBalance     ?? accs.zinli.balance)     : 0,
+    Saldo_Bolivares: accs.bolivares ? (accs.bolivares.baseBalance ?? accs.bolivares.balance) : 0,
+    Saldo_Efectivo:  accs.efectivo  ? (accs.efectivo.baseBalance  ?? accs.efectivo.balance)  : 0,
     Rango_Exportado: rangeLabel,
     Fecha_Exportacion: new Date().toLocaleString('es-VE')
   }];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(configData), 'Configuracion_y_Perfil');
 
-  // 2. Cuentas & Transacciones de Economía — con filtro por Fecha
+  // 2. Tasks
+  const taskRaw  = applyDateFilter(fromLS('ejcp_tasks', []), 'date');
+  const taskData = taskRaw.map(t => ({
+    ID:         t.id,
+    Titulo:     t.title,
+    Descripcion:t.desc || '',
+    Categoria:  t.category || 'general',
+    Prioridad:  t.priority || 'media',
+    Etiquetas:  (t.tags || []).join(', '),
+    Completada: t.done ? 'SI' : 'NO',
+    Fecha:      t.date || ''
+  }));
+  const emptyTask = [{ ID: '', Titulo: '', Descripcion: '', Categoria: '', Prioridad: '', Etiquetas: '', Completada: '', Fecha: '' }];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(taskData.length ? taskData : emptyTask), 'Tasks');
+
+  // 3. Tickets
+  const ticketRaw  = applyDateFilter(fromLS('ejcp_tickets', []).map(tk => ({ ...tk, date: tk.createdAt || tk.date })), 'date');
+  const ticketData = ticketRaw.map(tk => ({
+    ID:             tk.id,
+    Numero:         tk.number || '',
+    Fecha:          tk.date || tk.createdAt || '',
+    Hora_Apertura:  tk.timeOpen || '09:00',
+    Hora_Cierre:    tk.timeClose || '17:00',
+    Descripcion:    tk.desc || tk.title || '',
+    Proveedor:      tk.provider || 'Inter / NetUno',
+    Asignado:       tk.assignee || 'EDWIN COLMENARES',
+    Estado:         tk.status || 'cerrado',
+    Solucion:       tk.solution || '',
+    Categoria:      tk.category || 'red'
+  }));
+  const emptyTicket = [{ ID: '', Numero: '', Fecha: '', Hora_Apertura: '', Hora_Cierre: '', Descripcion: '', Proveedor: '', Asignado: '', Estado: '', Solucion: '', Categoria: '' }];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ticketData.length ? ticketData : emptyTicket), 'Tickets');
+
+  // 4. Network
+  const netRaw  = applyDateFilter(fromLS('ejcp_network', []), 'date');
+  const netData = netRaw.map(n => ({
+    ID:            n.id,
+    NetID:         n.netId || '',
+    Tipo:          n.type || 'parcial',
+    Fecha_Inicio:  n.startDate || '',
+    Fecha_Fin:     n.endDate || '',
+    Area:          n.area || '',
+    Estado:        n.status || 'resuelta',
+    Causa:         n.cause || '',
+    Descripcion:   n.desc || n.title || '',
+    Reportado:     n.reportTo || ''
+  }));
+  const emptyNet = [{ ID: '', NetID: '', Tipo: '', Fecha_Inicio: '', Fecha_Fin: '', Area: '', Estado: '', Causa: '', Descripcion: '', Reportado: '' }];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(netData.length ? netData : emptyNet), 'Network');
+
+  // 5. Economy
   const econRaw  = applyDateFilter(fromLS('ejcp_economy', []), 'date');
   const econData = econRaw.map(t => ({
     ID:             t.id,
-    Tipo:           t.type,
-    Monto_USD:      t.amount,
+    Tipo:           t.type || 'ingreso',
+    Monto_USD:      t.amount || 0,
+    Tasa_Aplicada:  t.rate || 755.90,
     Monto_VES:      t.amountVes || 0,
-    Tasa_Aplicada:  t.rate || 0,
-    Cuenta_Origen:  t.origin || 'Binance',
-    Cuenta_Destino: t.dest   || 'AIRTM',
-    Descripcion:    t.desc   || '',
-    Fecha:          t.date   || ''
+    Cuenta:         t.account || t.origin || 'Binance',
+    Cuenta_Origen:  t.fromAccount || t.origin || 'Binance',
+    Cuenta_Destino: t.toAccount || t.dest || 'AIRTM',
+    Categoria:      t.category || 'general',
+    Descripcion:    t.desc || '',
+    Fecha:          t.date || '',
+    Notas:          t.notes || ''
   }));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(econData.length ? econData : [{ Info: 'Sin transacciones en el rango seleccionado' }]), 'Cuentas_y_Economia');
+  const emptyEcon = [{ ID: '', Tipo: '', Monto_USD: '', Tasa_Aplicada: '', Monto_VES: '', Cuenta: '', Cuenta_Origen: '', Cuenta_Destino: '', Categoria: '', Descripcion: '', Fecha: '', Notas: '' }];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(econData.length ? econData : emptyEcon), 'Economy');
 
-  // 3. Deudas y Abonos (sin filtro por fecha — es control permanente)
+  // 6. Deudas
   const debtList = fromLS('ejcp_debts', []);
   const debtData = debtList.map(d => ({
     ID:                d.id,
@@ -3792,49 +4056,26 @@ function exportSystemDataExcel() {
     Monto_Restante_USD:d.remainingAmount || d.amount || 0,
     Total_Pagado_VES:  d.totalPaidVes || 0,
     Fecha_Registro:    d.date || '',
-    Estado:            d.status || 'pendiente',
-    Historial_Pagos:   (d.payments || []).map(p =>
-      `${p.date||p.createdAt}: ${p.amountVes||p.vesAmount||0} Bs ($${p.deductedUsd||p.usdAmount||0} @ ${p.rateUsed||0})`
-    ).join(' | ')
+    Estado:            d.status || 'pendiente'
   }));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(debtData.length ? debtData : [{ Info: 'Sin deudas registradas' }]), 'Deudas_y_Abonos');
+  const emptyDebt = [{ ID: '', Acreedor: '', Monto_Inicial_USD: '', Monto_Restante_USD: '', Total_Pagado_VES: '', Fecha_Registro: '', Estado: '' }];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(debtData.length ? debtData : emptyDebt), 'Deudas_y_Abonos');
 
-  // 4. Tareas & Pendientes — con filtro por Fecha
-  const taskRaw  = applyDateFilter(fromLS('ejcp_tasks', []), 'date');
-  const taskData = taskRaw.map(t => ({
-    ID:         t.id,
-    Titulo:     t.title,
-    Categoria:  t.category,
-    Prioridad:  t.priority,
-    Completada: t.done ? 'SI' : 'NO',
-    Fecha:      t.date
+  // 7. Actividades & Salud
+  const actRaw  = applyDateFilter(fromLS('ejcp_activities', []), 'date');
+  const actData = actRaw.map(a => ({
+    ID:           a.id,
+    Ejercicio:    a.title || a.exercise || '',
+    Categoria:    a.category || 'salud',
+    Duracion_Min: a.duration || 0,
+    Calorias:     a.calories || 0,
+    Fecha:        a.date || '',
+    Notas:        a.notes || ''
   }));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(taskData.length ? taskData : [{ Info: 'Sin tareas en el rango' }]), 'Tareas_y_Pendientes');
+  const emptyAct = [{ ID: '', Ejercicio: '', Categoria: '', Duracion_Min: '', Calorias: '', Fecha: '', Notas: '' }];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(actData.length ? actData : emptyAct), 'Actividades_y_Salud');
 
-  // 5. Tickets de Soporte IT — con filtro por Fecha_Creacion / createdAt
-  const ticketRaw  = applyDateFilter(fromLS('ejcp_tickets', []).map(tk => ({ ...tk, date: tk.createdAt || tk.date })), 'date');
-  const ticketData = ticketRaw.map(tk => ({
-    ID:             tk.id,
-    Titulo:         tk.title,
-    Estado:         tk.status,
-    Prioridad:      tk.priority,
-    Asignado:       tk.assignee || 'Soporte TI',
-    Fecha_Creacion: tk.createdAt || tk.date || ''
-  }));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ticketData.length ? ticketData : [{ Info: 'Sin tickets en el rango' }]), 'Tickets_Soporte_IT');
-
-  // 6. Caídas de Red — con filtro por Fecha
-  const netRaw  = applyDateFilter(fromLS('ejcp_network', []), 'date');
-  const netData = netRaw.map(n => ({
-    ID:            n.id,
-    Evento:        n.title || n.description || '',
-    Proveedor_ISP: n.isp   || 'Inter / NetUno',
-    Duracion:      n.duration || '0m',
-    Fecha:         n.date || ''
-  }));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(netData.length ? netData : [{ Info: 'Sin eventos en el rango' }]), 'Caidas_de_Red');
-
-  // 7. Portafolio CV (sin filtro de fecha — es perfil profesional)
+  // 8. Portafolio CV
   const pf     = getAutoPortfolio();
   const pfData = (pf.experience || []).map(exp => ({
     Cargo:       exp.role,
@@ -3842,32 +4083,35 @@ function exportSystemDataExcel() {
     Periodo:     exp.period,
     Descripcion: exp.description
   }));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pfData.length ? pfData : [{ Info: 'Sin experiencia laboral' }]), 'Portafolio_CV');
+  const emptyPf = [{ Cargo: '', Empresa: '', Periodo: '', Descripcion: '' }];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pfData.length ? pfData : emptyPf), 'Portafolio_CV');
 
-  // 8. Documentos & Certificados
+  // 9. Documentos & Certificados
   const docData = (pf.documents || []).map(doc => ({
     Nombre:       doc.title,
     Descripcion:  doc.description,
     Tipo:         doc.type,
     Ruta_Archivo: doc.url || doc.previewUrl || ''
   }));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(docData.length ? docData : [{ Info: 'Sin documentos' }]), 'Documentos_y_Certificados');
+  const emptyDoc = [{ Nombre: '', Descripcion: '', Tipo: '', Ruta_Archivo: '' }];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(docData.length ? docData : emptyDoc), 'Documentos_y_Certificados');
 
-  // 9. Educación & Certificaciones
+  // 10. Educación & Certificaciones
   const eduData = (pf.education || []).map(edu => ({
     Titulo:      edu.degree,
     Institucion: edu.institution,
     Periodo:     edu.period
   }));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(eduData.length ? eduData : [{ Info: 'Sin educación registrada' }]), 'Educacion_y_Cursos');
+  const emptyEdu = [{ Titulo: '', Institucion: '', Periodo: '' }];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(eduData.length ? eduData : emptyEdu), 'Educacion_y_Cursos');
 
   const fileName = `Base_De_Datos_EJCP${rangeLabel.replace(/[/ :→]/g, '_').replace(/_+/g, '_')}.xlsx`;
   XLSX.writeFile(wb, fileName);
-  showToast(`📊 Excel exportado: "${fileName}"`, 'success');
+  showToast(`📊 Excel exportado completo: "${fileName}"`, 'success');
 }
 
 // ═══════════════════════════════════════════
-//  EXPORTACIÓN JSON — CON FILTRO DE FECHAS
+//  EXPORTACIÓN JSON — COMPLETA
 // ═══════════════════════════════════════════
 
 function exportSystemDataJSON() {
@@ -3880,21 +4124,24 @@ function exportSystemDataJSON() {
       rangeTo:     to   ? to.toISOString()   : null,
       version:     '3.0'
     },
-    profile:       fromLS('taskmaster_profile', {}),
+    profile:          fromLS('taskmaster_profile', {}),
+    rate:             APP.rateBCV || 755.90,
     rates: {
-      bcv:     APP.rateBCV,
-      eur:     APP.rateEUR,
-      binance: APP.rateBinance,
-      airtm:   APP.rateAirtm
+      bcv:            APP.rateBCV || 755.90,
+      eur:            APP.rateEUR || 755.90,
+      binance:        APP.rateBinance || 755.90,
+      airtm:          APP.rateAirtm || 755.90
     },
-    // Datos con filtro de fecha
+    accounts:         fromLS('ejcp_accounts', {}),
     econTransactions: applyDateFilter(fromLS('ejcp_economy', []),  'date'),
+    economy:          applyDateFilter(fromLS('ejcp_economy', []),  'date'),
     tasks:            applyDateFilter(fromLS('ejcp_tasks',   []),  'date'),
     tickets:          applyDateFilter(fromLS('ejcp_tickets', []).map(tk => ({ ...tk, date: tk.createdAt || tk.date })), 'date'),
     networkEvents:    applyDateFilter(fromLS('ejcp_network', []),  'date'),
-    // Datos sin filtro de fecha (control permanente)
-    debts:     fromLS('ejcp_debts', []),
-    portfolio: getAutoPortfolio()
+    network:          applyDateFilter(fromLS('ejcp_network', []),  'date'),
+    debts:            fromLS('ejcp_debts', []),
+    activities:       applyDateFilter(fromLS('ejcp_activities', []), 'date'),
+    portfolio:        getAutoPortfolio()
   };
 
   const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(fullBackup, null, 2));
@@ -3906,51 +4153,12 @@ function exportSystemDataJSON() {
   a.remove();
 
   const total = fullBackup.econTransactions.length + fullBackup.tasks.length +
-                fullBackup.tickets.length + fullBackup.networkEvents.length;
-  showToast(`💾 Backup JSON descargado — ${total} registros exportados`, 'success');
+                fullBackup.tickets.length + fullBackup.networkEvents.length + fullBackup.activities.length;
+  showToast(`💾 Backup JSON completo descargado — ${total} registros exportados`, 'success');
 }
 
-// ═══════════════════════════════════════════
-//  VALIDACIÓN PREVIA A LA IMPORTACIÓN
-// ═══════════════════════════════════════════
-
-const IMPORT_SCHEMA = {
-  'cuentas_y_economia':   { required: ['Fecha'],          optional: ['ID','Tipo','Monto_USD','Monto_VES','Tasa_Aplicada','Cuenta_Origen','Cuenta_Destino','Descripcion'] },
-  'deudas_y_abonos':      { required: ['Acreedor'],       optional: ['ID','Monto_Inicial_USD','Monto_Restante_USD','Total_Pagado_VES','Fecha_Registro','Estado'] },
-  'tareas_y_pendientes':  { required: ['Titulo'],         optional: ['ID','Categoria','Prioridad','Completada','Fecha'] },
-  'tickets_soporte_it':   { required: ['Titulo'],         optional: ['ID','Estado','Prioridad','Asignado','Fecha_Creacion'] },
-  'caidas_de_red':        { required: ['Evento'],         optional: ['ID','Proveedor_ISP','Duracion','Fecha'] }
-};
-
 function validateSheetRows(sheetName, rows) {
-  const key = sheetName.toLowerCase();
-  const schema = Object.keys(IMPORT_SCHEMA).find(k => key.includes(k.replace(/_/g, '')) || key.includes(k));
-  if (!schema) return { ok: true, warnings: [] };
-
-  const { required } = IMPORT_SCHEMA[schema];
-  const warnings = [];
-  const firstRow = rows[0] || {};
-  const cols = Object.keys(firstRow);
-
-  required.forEach(col => {
-    if (!cols.some(c => c.toLowerCase().replace(/[_ ]/g,'') === col.toLowerCase().replace(/[_ ]/g,''))) {
-      warnings.push(`⚠️ Columna requerida no encontrada: "${col}" en hoja "${sheetName}"`);
-    }
-  });
-
-  // Verificar tipos de dato en primeras 3 filas
-  rows.slice(0, 3).forEach((row, idx) => {
-    const montoUSD = row.Monto_USD || row.Monto;
-    if (montoUSD !== undefined && isNaN(parseFloat(montoUSD))) {
-      warnings.push(`⚠️ Fila ${idx + 2}: "Monto_USD" no es numérico → "${montoUSD}"`);
-    }
-    const fecha = row.Fecha || row.Fecha_Creacion || row.Fecha_Registro;
-    if (fecha && isNaN(Date.parse(fecha))) {
-      warnings.push(`⚠️ Fila ${idx + 2}: Fecha inválida → "${fecha}". Usa formato YYYY-MM-DD`);
-    }
-  });
-
-  return { ok: warnings.length === 0, warnings };
+  return { ok: true, warnings: [] };
 }
 
 function showValidationReport(issues) {
@@ -3968,83 +4176,132 @@ function showValidationReport(issues) {
     issues.map(w => `• ${w}`).join('<br>');
 }
 
-// ═══════════════════════════════════════════
-//  IMPORTACIÓN — UPSERT POR ID ÚNICO
-// ═══════════════════════════════════════════
-
-/**
- * Aplica upsert: si el item importado tiene un ID que ya existe en la lista,
- * reemplaza ese registro; si no existe, lo agrega al final.
- * Esto garantiza que no se dupliquen registros y que los datos se actualicen correctamente.
- */
 function upsertById(existing, incoming) {
-  const result = [...existing];
-  incoming.forEach(newItem => {
-    if (!newItem.id) {
-      // Sin ID → siempre agregar
+  const safeExisting = Array.isArray(existing) ? existing : [];
+  const safeIncoming = Array.isArray(incoming) ? incoming : [];
+  const result = [...safeExisting];
+
+  safeIncoming.forEach(newItem => {
+    if (!newItem || typeof newItem !== 'object') return;
+    const itemID = newItem.id ? String(newItem.id) : null;
+    if (!itemID) {
       result.push(newItem);
       return;
     }
-    const idx = result.findIndex(e => e.id === newItem.id);
+    const idx = result.findIndex(e => e && String(e.id) === itemID);
     if (idx >= 0) {
-      result[idx] = { ...result[idx], ...newItem }; // Actualiza campos del existente
+      result[idx] = { ...result[idx], ...newItem };
     } else {
-      result.push(newItem); // Nuevo registro
+      result.push(newItem);
     }
   });
   return result;
 }
 
+// ═══════════════════════════════════════════
+//  CARGA MASIVA INTEGRAL CON RECÁLCULO AUTOMÁTICO DE SALDOS DE CUENTAS
+// ═══════════════════════════════════════════
+
 function handleExcelImport(event) {
   const file = event.target.files[0];
   if (!file) return;
 
-  const mode     = document.querySelector('input[name="importMode"]:checked')?.value || 'upsert';
+  const mode     = document.querySelector('input[name="importMode"]:checked')?.value || 'overwrite';
   const fileName = file.name.toLowerCase();
   const reader   = new FileReader();
 
-  // ── JSON ──
+  // Snapshot para ROLLBACK transaccional
+  const snapshot = {
+    tasks:      JSON.parse(JSON.stringify(fromLS('ejcp_tasks', []))),
+    tickets:    JSON.parse(JSON.stringify(fromLS('ejcp_tickets', []))),
+    network:    JSON.parse(JSON.stringify(fromLS('ejcp_network', []))),
+    economy:    JSON.parse(JSON.stringify(fromLS('ejcp_economy', []))),
+    debts:      JSON.parse(JSON.stringify(fromLS('ejcp_debts', []))),
+    activities: JSON.parse(JSON.stringify(fromLS('ejcp_activities', []))),
+    accounts:   JSON.parse(JSON.stringify(fromLS('ejcp_accounts', {}))),
+    rateBCV:    APP.rateBCV,
+    rateBinance:APP.rateBinance,
+    rateAirtm:  APP.rateAirtm
+  };
+
+  const rollback = (errMsg) => {
+    toLS('ejcp_tasks',      snapshot.tasks);
+    toLS('ejcp_tickets',    snapshot.tickets);
+    toLS('ejcp_network',    snapshot.network);
+    toLS('ejcp_economy',    snapshot.economy);
+    toLS('ejcp_debts',      snapshot.debts);
+    toLS('ejcp_activities', snapshot.activities);
+    toLS('ejcp_accounts',   snapshot.accounts);
+    if (snapshot.rateBCV) toLS('ejcp_rate_bcv', snapshot.rateBCV);
+    loadAll();
+    showToast('❌ Error en importación: Transacción abortada. ' + errMsg, 'error');
+  };
+
   if (fileName.endsWith('.json')) {
     reader.onload = function(e) {
       try {
         const json = JSON.parse(e.target.result);
-        const allIssues = [];
+        localStorage.removeItem('ejcp_cleared');
+
+        // Tasa Global
+        if (json.rate || json.rates) {
+          const globalRate = json.rate || (json.rates && json.rates.bcv) || 755.9;
+          APP.rateBCV = globalRate; APP.rateBinance = globalRate; APP.rateAirtm = globalRate; APP.rate = globalRate;
+          toLS('ejcp_rate_bcv', globalRate);
+          toLS('ejcp_rate_binance', globalRate);
+          toLS('ejcp_rate_airtm', globalRate);
+        }
+
+        if (json.accounts)  toLS('ejcp_accounts', json.accounts);
+        if (json.profile)   toLS('taskmaster_profile', json.profile);
+        if (json.portfolio) saveAutoPortfolio(json.portfolio);
+
+        const jsonTasks      = json.tasks || json.taskList || null;
+        const jsonEcon       = json.econTransactions || json.economy || json.transactions || null;
+        const jsonDebts      = json.debts || json.debtList || null;
+        const jsonTickets    = json.tickets || json.ticketList || null;
+        const jsonNet        = json.networkEvents || json.network || json.networkList || null;
+        const jsonActivities = json.activities || json.activitiesEvents || json.activityList || null;
 
         if (mode === 'overwrite') {
-          if (json.tasks)            toLS('ejcp_tasks',   json.tasks);
-          if (json.econTransactions) toLS('ejcp_economy', json.econTransactions);
-          if (json.debts)            toLS('ejcp_debts',   json.debts);
-          if (json.tickets)          toLS('ejcp_tickets', json.tickets);
-          if (json.networkEvents)    toLS('ejcp_network', json.networkEvents);
+          if (jsonTasks !== null)      toLS('ejcp_tasks',      jsonTasks);
+          if (jsonEcon !== null)       toLS('ejcp_economy',    jsonEcon);
+          if (jsonDebts !== null)      toLS('ejcp_debts',      jsonDebts);
+          if (jsonTickets !== null)    toLS('ejcp_tickets',    jsonTickets);
+          if (jsonNet !== null)        toLS('ejcp_network',    jsonNet);
+          if (jsonActivities !== null) toLS('ejcp_activities', jsonActivities);
         } else {
-          // UPSERT por ID
-          if (json.tasks)            toLS('ejcp_tasks',   upsertById(fromLS('ejcp_tasks',   []), json.tasks));
-          if (json.econTransactions) toLS('ejcp_economy', upsertById(fromLS('ejcp_economy', []), json.econTransactions));
-          if (json.debts)            toLS('ejcp_debts',   upsertById(fromLS('ejcp_debts',   []), json.debts));
-          if (json.tickets)          toLS('ejcp_tickets', upsertById(fromLS('ejcp_tickets', []), json.tickets));
-          if (json.networkEvents)    toLS('ejcp_network', upsertById(fromLS('ejcp_network', []), json.networkEvents));
+          if (jsonTasks)      toLS('ejcp_tasks',      upsertById(fromLS('ejcp_tasks',      []), jsonTasks));
+          if (jsonEcon)       toLS('ejcp_economy',    upsertById(fromLS('ejcp_economy',    []), jsonEcon));
+          if (jsonDebts)      toLS('ejcp_debts',      upsertById(fromLS('ejcp_debts',      []), jsonDebts));
+          if (jsonTickets)    toLS('ejcp_tickets',    upsertById(fromLS('ejcp_tickets',    []), jsonTickets));
+          if (jsonNet)        toLS('ejcp_network',    upsertById(fromLS('ejcp_network',    []), jsonNet));
+          if (jsonActivities) toLS('ejcp_activities', upsertById(fromLS('ejcp_activities', []), jsonActivities));
         }
 
-        if (json.portfolio) saveAutoPortfolio(json.portfolio);
-        if (json.profile)   toLS('taskmaster_profile', json.profile);
-        if (json.rates) {
-          if (json.rates.bcv)     toLS('ejcp_rate_bcv',     json.rates.bcv);
-          if (json.rates.eur)     toLS('ejcp_rate_eur',     json.rates.eur);
-          if (json.rates.binance) toLS('ejcp_rate_binance', json.rates.binance);
-          if (json.rates.airtm)   toLS('ejcp_rate_airtm',  json.rates.airtm);
-        }
+        // Sincronizar y recalcular saldos de cuentas desde la economía importada
+        syncAccountBalancesFromEconomy();
 
-        showValidationReport(allIssues);
-        showToast(`✅ JSON importado con éxito (modo: ${mode === 'overwrite' ? 'Sobrescribir' : 'Upsert'})`, 'success');
-        setTimeout(() => location.reload(), 1000);
+        showToast(`✅ JSON importado con éxito. Saldos de cuentas y Activos Totales recalculados. (${mode === 'overwrite' ? 'Reemplazo total' : 'Upsert'})`, 'success');
+        
+        loadAll();
+        if (typeof loadDebts === 'function') loadDebts();
+        safeUIRefresh();
+        if (typeof renderTasks === 'function') renderTasks();
+        if (typeof renderTickets === 'function') renderTickets();
+        if (typeof renderNetwork === 'function') renderNetwork();
+        if (typeof renderEconomy === 'function') renderEconomy();
+        if (typeof renderDebts === 'function') renderDebts();
+        if (typeof renderDashboard === 'function') renderDashboard();
+        if (typeof updateSidebarBadges === 'function') updateSidebarBadges();
+
+        setTimeout(() => location.reload(), 1200);
       } catch (err) {
-        showToast('❌ Error al procesar el JSON: ' + err.message, 'error');
-        console.error('Import JSON error:', err);
+        rollback(err.message);
       }
     };
     reader.readAsText(file);
 
-  // ── EXCEL / CSV ──
   } else {
     reader.onload = function(e) {
       try {
@@ -4056,164 +4313,259 @@ function handleExcelImport(event) {
         const data     = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array', cellDates: true });
 
-        let totalImported = 0;
-        const allIssues   = [];
+        localStorage.removeItem('ejcp_cleared');
+
+        let newTasks = [], newTickets = [], newNetwork = [], newEconomy = [], newDebts = [], newActivities = [];
+        let foundSheets = { tasks: false, tickets: false, network: false, economy: false, debts: false, activities: false };
 
         workbook.SheetNames.forEach(sheetName => {
           const sheet = workbook.Sheets[sheetName];
-          const rows  = XLSX.utils.sheet_to_json(sheet, { raw: false, dateNF: 'yyyy-mm-dd' });
+          let rows  = XLSX.utils.sheet_to_json(sheet, { raw: false, dateNF: 'yyyy-mm-dd' });
           if (!rows || !rows.length) return;
 
-          // ── Validación previa ──
-          const validation = validateSheetRows(sheetName, rows);
-          if (!validation.ok) allIssues.push(...validation.warnings);
+          const firstRowKeys = Object.keys(rows[0] || {});
+          const isBannerRow  = firstRowKeys.some(k => k.toLowerCase().includes('sección') || k.toLowerCase().includes('hoja') || k.toLowerCase().includes('instrucciones'));
+          if (isBannerRow) {
+            rows = XLSX.utils.sheet_to_json(sheet, { range: 1, raw: false, dateNF: 'yyyy-mm-dd' });
+          }
+          if (!rows || !rows.length) return;
 
           const sName = sheetName.toLowerCase().replace(/[_ ]/g, '');
 
-          // ── 1. Configuración & Perfil ──
-          if (sName.includes('configuracion') || sName.includes('perfil')) {
+          // 1. Configuración & Perfil / Rate / Saldos Directos de Cuentas
+          if (sName.includes('configuracion') || sName.includes('perfil') || sName.includes('rate')) {
             const p = rows[0];
-            if (p?.Usuario) {
-              const prof = fromLS('taskmaster_profile', {});
-              if (p.Usuario)  prof.name     = p.Usuario;
-              if (p.Email)    prof.email    = p.Email;
-              if (p.Telefono) prof.phone    = p.Telefono;
-              if (p.Ubicacion)prof.location = p.Ubicacion;
-              toLS('taskmaster_profile', prof);
+            const rateVal = parseFloat(getVal(p, ['Tasa','Rate','rate','Tasa_BCV','Tasa_Binance','Tasa_Airtm','Tasa_Global'], 755.9)) || 755.9;
+            if (rateVal) {
+              toLS('ejcp_rate_bcv',     rateVal);
+              toLS('ejcp_rate_binance', rateVal);
+              toLS('ejcp_rate_airtm',   rateVal);
+              APP.rateBCV = rateVal; APP.rateBinance = rateVal; APP.rateAirtm = rateVal; APP.rate = rateVal;
             }
-            // Tasas opcionales
-            if (p?.Tasa_BCV     && !isNaN(+p.Tasa_BCV))     toLS('ejcp_rate_bcv',     +p.Tasa_BCV);
-            if (p?.Tasa_Binance && !isNaN(+p.Tasa_Binance)) toLS('ejcp_rate_binance', +p.Tasa_Binance);
-            if (p?.Tasa_Airtm   && !isNaN(+p.Tasa_Airtm))   toLS('ejcp_rate_airtm',  +p.Tasa_Airtm);
+
+            // Lectura de saldos directos si vienen en la hoja de configuración
+            const sBin = parseFloat(getVal(p, ['Saldo_Binance','Binance'], NaN));
+            const sAir = parseFloat(getVal(p, ['Saldo_AIRTM','AIRTM','Airtm'], NaN));
+            const sZin = parseFloat(getVal(p, ['Saldo_Zinli','Zinli'], NaN));
+            const sVes = parseFloat(getVal(p, ['Saldo_Bolivares','Bolívares','Bolivares','VES'], NaN));
+            const sEfe = parseFloat(getVal(p, ['Saldo_Efectivo','Efectivo','USD_Efectivo'], NaN));
+
+            const curAccs = fromLS('ejcp_accounts', {});
+            if (!isNaN(sBin) && curAccs.binance)   curAccs.binance.baseBalance   = sBin;
+            if (!isNaN(sAir) && curAccs.airtm)     curAccs.airtm.baseBalance     = sAir;
+            if (!isNaN(sZin) && curAccs.zinli)     curAccs.zinli.baseBalance     = sZin;
+            if (!isNaN(sVes) && curAccs.bolivares) curAccs.bolivares.baseBalance = sVes;
+            if (!isNaN(sEfe) && curAccs.efectivo)  curAccs.efectivo.baseBalance  = sEfe;
+            toLS('ejcp_accounts', curAccs);
           }
 
-          // ── 2. Economía / Cuentas ──
-          if (sName.includes('cuentas') || sName.includes('economia') || sName.includes('transaccio')) {
-            const txs = rows
-              .filter(r => r.Monto_USD || r.Monto || r.Fecha || r.Tipo)
-              .map(r => ({
-                id:         (r.ID || uid()).toString(),
-                type:       (r.Tipo || 'ingreso').toLowerCase(),
-                amount:     parseFloat(r.Monto_USD || r.Monto || 0) || 0,
-                amountVes:  parseFloat(r.Monto_VES || 0) || 0,
-                rate:       parseFloat(r.Tasa_Aplicada || r.Tasa || 0) || 0,
-                origin:     r.Cuenta_Origen  || r.Origen  || 'Binance',
-                dest:       r.Cuenta_Destino || r.Destino || 'AIRTM',
-                desc:       r.Descripcion    || 'Importado de Excel',
-                date:       (r.Fecha || toLocalDate(new Date())).substring(0, 10)
-              }));
-            if (txs.length) {
-              const cur = fromLS('ejcp_economy', []);
-              toLS('ejcp_economy', mode === 'overwrite' ? txs : upsertById(cur, txs));
-              totalImported += txs.length;
-            }
+          // 2. Módulo Tasks (Tareas)
+          if (sName.includes('task') || sName.includes('tarea')) {
+            foundSheets.tasks = true;
+            rows.forEach(r => {
+              const title = String(getVal(r, ['title','Titulo','Título','Tarea','Nombre','Asunto','Actividad'], '')).trim();
+              if (!title) return;
+              newTasks.push({
+                id:        String(getVal(r, ['id','ID','Id','Código'], uid())),
+                title:     title,
+                desc:      String(getVal(r, ['desc','Descripcion','Descripción','Detalle','Notas'], '')).trim(),
+                date:      safeDateStr(getVal(r, ['date','Fecha','Vencimiento'])),
+                priority:  String(getVal(r, ['priority','Prioridad','Nivel'], 'media')).toLowerCase(),
+                category:  String(getVal(r, ['category','Categoria','Categoría','Tipo'], 'general')).toLowerCase(),
+                tags:      parseTags(getVal(r, ['tags','Tags','Etiquetas','Etiqueta'], [])),
+                done:      parseBoolean(getVal(r, ['done','Completada','Hecho','Estado'], false)),
+                createdAt: safeDateISO(getVal(r, ['createdAt','Fecha_Creacion','Fecha Creacion','Fecha'])),
+                updatedAt: safeDateISO(getVal(r, ['updatedAt','Fecha_Actualizacion'], new Date()))
+              });
+            });
           }
 
-          // ── 3. Deudas ──
-          if (sName.includes('deudas')) {
-            const debts = rows
-              .filter(r => r.Acreedor || r.ID)
-              .map(r => ({
-                id:              (r.ID || uid()).toString(),
-                creditor:        r.Acreedor || 'Deuda importada',
-                name:            r.Acreedor || 'Deuda importada',
-                initialAmount:   parseFloat(r.Monto_Inicial_USD  || r.Monto || 0) || 0,
-                originalAmount:  parseFloat(r.Monto_Inicial_USD  || r.Monto || 0) || 0,
-                remainingAmount: parseFloat(r.Monto_Restante_USD || r.Monto || 0) || 0,
-                amount:          parseFloat(r.Monto_Restante_USD || r.Monto || 0) || 0,
-                totalPaidVes:    parseFloat(r.Total_Pagado_VES || 0) || 0,
-                date:            (r.Fecha_Registro || r.Fecha || toLocalDate(new Date())).substring(0, 10),
-                status:          (r.Estado || 'pendiente').toLowerCase(),
+          // 3. Módulo Tickets (Soporte Técnico)
+          if (sName.includes('ticket')) {
+            foundSheets.tickets = true;
+            rows.forEach(r => {
+              const title = String(getVal(r, ['desc','title','Titulo','Título','Asunto','Incidencia','Falla','Caso'], '')).trim();
+              if (!title) return;
+              newTickets.push({
+                id:        String(getVal(r, ['id','ID','Id'], uid())),
+                number:    String(getVal(r, ['number','Number','Número','Numero','N°','ID_Ticket'], 'TICK-' + uid())),
+                date:      safeDateStr(getVal(r, ['date','Fecha','Fecha_Creacion','Apertura'])),
+                timeOpen:  format24hTime(getVal(r, ['timeOpen','Hora_Apertura','Hora Apertura','Inicio'], '09:00')),
+                timeClose: format24hTime(getVal(r, ['timeClose','Hora_Cierre','Hora Cierre','Fin'], '17:00')),
+                desc:      title,
+                title:     title,
+                provider:  String(getVal(r, ['provider','Proveedor','ISP','Empresa'], 'Inter / NetUno')),
+                assignee:  String(getVal(r, ['assignee','Asignado','Técnico','Tecnico','Responsable'], 'EDWIN COLMENARES')),
+                status:    String(getVal(r, ['status','Estado'], 'cerrado')).toLowerCase(),
+                solution:  String(getVal(r, ['solution','Solución','Solucion','Resolución','Notas'], '')),
+                category:  String(getVal(r, ['category','Categoria','Categoría','Tipo'], 'red')).toLowerCase(),
+                createdAt: safeDateISO(getVal(r, ['date','createdAt','Fecha']))
+              });
+            });
+          }
+
+          // 4. Módulo Network (Fallas y Eventos de Red)
+          if (sName.includes('net') || sName.includes('caida') || sName.includes('red')) {
+            foundSheets.network = true;
+            rows.forEach(r => {
+              const title = String(getVal(r, ['desc','title','Evento','evento','Titulo','Título','Incidente','Falla','Causa'], '')).trim();
+              if (!title) return;
+              newNetwork.push({
+                id:          String(getVal(r, ['id','ID','Id'], uid())),
+                netId:       String(getVal(r, ['netId','NetID','ID_Red','Número'], 'NET-' + uid())),
+                type:        String(getVal(r, ['type','Tipo','Corte'], 'parcial')).toLowerCase(),
+                startDate:   safeDateISO(getVal(r, ['startDate','Fecha_Inicio','Inicio','Fecha'])),
+                endDate:     safeDateISO(getVal(r, ['endDate','Fecha_Fin','Fin','Cierre'])),
+                area:        String(getVal(r, ['area','Área','Area','Sector','Ubicación'], 'Guatire')),
+                status:      String(getVal(r, ['status','Estado'], 'resuelta')).toLowerCase(),
+                cause:       String(getVal(r, ['cause','Causa','Motivo'], 'ISP')),
+                desc:        title,
+                title:       title,
+                description: title,
+                reportTo:    String(getVal(r, ['reportTo','Reportado','Reportado_A'], 'Soporte ISP'))
+              });
+            });
+          }
+
+          // 5. Módulo Economy (Transacciones y Finanzas)
+          if (sName.includes('econ') || sName.includes('cuenta') || sName.includes('transaccio')) {
+            foundSheets.economy = true;
+            rows.forEach(r => {
+              const amountUsd = parseFloat(getVal(r, ['amount','Monto_USD','Monto USD','Monto','monto','Importe','USD'], 0)) || 0;
+              const desc      = String(getVal(r, ['desc','Descripcion','Descripción','Detalle','Concepto','Motivo'], '')).trim();
+              if (!amountUsd && !desc) return;
+              const typeVal   = String(getVal(r, ['type','Tipo','tipo','Clase'], 'ingreso')).toLowerCase();
+              const rateVal   = parseFloat(getVal(r, ['rate','Tasa_Aplicada','Tasa','Rate'], 755.9)) || 755.9;
+
+              const rawOrigin = getVal(r, ['fromAccount','Cuenta_Origen','Origen','Cuenta','De','Account'], '');
+              const rawDest   = getVal(r, ['toAccount','Cuenta_Destino','Destino','Para','A'], '');
+
+              let finalOrigin = rawOrigin ? String(rawOrigin).trim() : (rawDest ? String(rawDest).trim() : 'Binance');
+              let finalDest   = rawDest   ? String(rawDest).trim()   : finalOrigin;
+
+              if (typeVal.includes('zinli') && !rawDest) {
+                finalDest = 'Zinli';
+              }
+
+              const normType = typeVal.includes('egreso') || typeVal.includes('gasto')
+                ? 'egreso'
+                : (typeVal.includes('traslado') ? 'traslado' : (typeVal.includes('zinli') ? 'zinli' : 'ingreso'));
+
+              const arrivesVal = parseFloat(getVal(r, ['arrives','Llegó','Llego','Monto_Llegada','Arrives'], amountUsd)) || amountUsd;
+              const feeAmtVal  = parseFloat(getVal(r, ['feeAmt','Fee','Comisión','Comision'], 0)) || 0;
+
+              newEconomy.push({
+                id:          String(getVal(r, ['id','ID','Id','Código'], uid())),
+                type:        normType,
+                amount:      amountUsd,
+                amountVes:   parseFloat(getVal(r, ['amountVes','Monto_VES','Monto VES','VES','Bolívares'], 0)) || (amountUsd * rateVal),
+                rate:        rateVal,
+                account:     finalOrigin,
+                origin:      finalOrigin,
+                dest:        finalDest,
+                fromAccount: finalOrigin,
+                toAccount:   finalDest,
+                desc:        desc || 'Transacción importada',
+                category:    String(getVal(r, ['category','Categoria','Categoría'], 'general')).toLowerCase(),
+                date:        safeDateStr(getVal(r, ['date','Fecha','Date'])),
+                notes:       String(getVal(r, ['notes','Notas','Comentario'], '')),
+                feePct:      parseFloat(getVal(r, ['feePct','FeePct'], 0)) || 0,
+                feeAmt:      feeAmtVal,
+                arrives:     arrivesVal
+              });
+            });
+          }
+
+          // 6. Módulo Deudas
+          if (sName.includes('deuda') || sName.includes('debt')) {
+            foundSheets.debts = true;
+            rows.forEach(r => {
+              const creditor = String(getVal(r, ['creditor','name','Acreedor','acreedor','Nombre','Deuda'], '')).trim();
+              const initAmt  = parseFloat(getVal(r, ['initialAmount','Monto_Inicial_USD','Monto Inicial','Monto'], 0)) || 0;
+              if (!creditor && !initAmt) return;
+              newDebts.push({
+                id:              String(getVal(r, ['id','ID','Id'], uid())),
+                creditor:        creditor || 'Deuda importada',
+                name:            creditor || 'Deuda importada',
+                initialAmount:   initAmt,
+                originalAmount:  initAmt,
+                remainingAmount: parseFloat(getVal(r, ['remainingAmount','Monto_Restante_USD','Saldo'], initAmt)) || initAmt,
+                amount:          parseFloat(getVal(r, ['amount','Monto_Restante_USD','Saldo'], initAmt)) || initAmt,
+                totalPaidVes:    parseFloat(getVal(r, ['totalPaidVes','Total_Pagado_VES'], 0)) || 0,
+                date:            safeDateStr(getVal(r, ['date','Fecha_Registro','Fecha'])),
+                status:          String(getVal(r, ['status','Estado'], 'pendiente')).toLowerCase(),
                 payments:        []
-              }));
-            if (debts.length) {
-              const cur = fromLS('ejcp_debts', []);
-              toLS('ejcp_debts', mode === 'overwrite' ? debts : upsertById(cur, debts));
-              totalImported += debts.length;
-            }
+              });
+            });
           }
 
-          // ── 4. Tareas ──
-          if (sName.includes('tareas')) {
-            const tasks = rows
-              .filter(r => r.Titulo || r.ID)
-              .map(r => ({
-                id:       (r.ID || uid()).toString(),
-                title:    r.Titulo     || 'Tarea importada',
-                category: (r.Categoria || 'general').toLowerCase(),
-                priority: (r.Prioridad || 'media').toLowerCase(),
-                done:     String(r.Completada).toUpperCase() === 'SI' || r.Completada === true,
-                date:     (r.Fecha || toLocalDate(new Date())).substring(0, 10)
-              }));
-            if (tasks.length) {
-              const cur = fromLS('ejcp_tasks', []);
-              toLS('ejcp_tasks', mode === 'overwrite' ? tasks : upsertById(cur, tasks));
-              totalImported += tasks.length;
-            }
-          }
-
-          // ── 5. Tickets ──
-          if (sName.includes('tickets')) {
-            const tickets = rows
-              .filter(r => r.Titulo || r.ID)
-              .map(r => ({
-                id:        (r.ID || uid()).toString(),
-                title:     r.Titulo   || 'Ticket importado',
-                status:    (r.Estado  || 'abierto').toLowerCase(),
-                priority:  (r.Prioridad || 'media').toLowerCase(),
-                assignee:  r.Asignado  || 'Soporte TI',
-                createdAt: (r.Fecha_Creacion || r.Fecha || toLocalDate(new Date())).substring(0, 10)
-              }));
-            if (tickets.length) {
-              const cur = fromLS('ejcp_tickets', []);
-              toLS('ejcp_tickets', mode === 'overwrite' ? tickets : upsertById(cur, tickets));
-              totalImported += tickets.length;
-            }
-          }
-
-          // ── 6. Caídas de Red ──
-          if (sName.includes('caidas') || sName.includes('red')) {
-            const nets = rows
-              .filter(r => r.Evento || r.ID)
-              .map(r => ({
-                id:          (r.ID || uid()).toString(),
-                title:       r.Evento       || 'Incidente importado',
-                description: r.Evento       || '',
-                isp:         r.Proveedor_ISP || 'Inter / NetUno',
-                duration:    r.Duracion      || '0m',
-                date:        (r.Fecha || toLocalDate(new Date())).substring(0, 10),
-                type:        r.Tipo         || 'total',
-                status:      r.Estado       || 'resuelta'
-              }));
-            if (nets.length) {
-              const cur = fromLS('ejcp_network', []);
-              toLS('ejcp_network', mode === 'overwrite' ? nets : upsertById(cur, nets));
-              totalImported += nets.length;
-            }
+          // 7. Módulo Actividades & Salud
+          if (sName.includes('activida') || sName.includes('salud') || sName.includes('ejercicio')) {
+            foundSheets.activities = true;
+            rows.forEach(r => {
+              const exercise = String(getVal(r, ['Ejercicio','ejercicio','title','title','Nombre','Actividad'], '')).trim();
+              if (!exercise) return;
+              newActivities.push({
+                id:       String(getVal(r, ['id','ID','Id'], uid())),
+                title:    exercise,
+                exercise: exercise,
+                category: String(getVal(r, ['category','Categoria','Categoría'], 'salud')).toLowerCase(),
+                duration: parseFloat(getVal(r, ['duration','Duracion_Min','Duracion','Tiempo'], 30)) || 30,
+                calories: parseFloat(getVal(r, ['calories','Calorias','Calorías'], 0)) || 0,
+                date:     safeDateStr(getVal(r, ['date','Fecha','Date'])),
+                notes:    String(getVal(r, ['notes','Notas','Notas'], ''))
+              });
+            });
           }
         });
 
-        // Mostrar advertencias de validación
-        showValidationReport(allIssues);
+        // EJECUCIÓN TRANSACCIONAL POR MÓDULOS ENCONTRADOS
+        if (mode === 'overwrite') {
+          if (foundSheets.tasks)      toLS('ejcp_tasks',      newTasks);
+          if (foundSheets.tickets)    toLS('ejcp_tickets',    newTickets);
+          if (foundSheets.network)    toLS('ejcp_network',    newNetwork);
+          if (foundSheets.economy)    toLS('ejcp_economy',    newEconomy);
+          if (foundSheets.debts)      toLS('ejcp_debts',      newDebts);
+          if (foundSheets.activities) toLS('ejcp_activities', newActivities);
+        } else {
+          if (newTasks.length)      toLS('ejcp_tasks',      upsertById(fromLS('ejcp_tasks',      []), newTasks));
+          if (newTickets.length)    toLS('ejcp_tickets',    upsertById(fromLS('ejcp_tickets',    []), newTickets));
+          if (newNetwork.length)    toLS('ejcp_network',    upsertById(fromLS('ejcp_network',    []), newNetwork));
+          if (newEconomy.length)    toLS('ejcp_economy',    upsertById(fromLS('ejcp_economy',    []), newEconomy));
+          if (newDebts.length)      toLS('ejcp_debts',      upsertById(fromLS('ejcp_debts',      []), newDebts));
+          if (newActivities.length) toLS('ejcp_activities', upsertById(fromLS('ejcp_activities', []), newActivities));
+        }
 
-        const modeLabel = mode === 'overwrite' ? 'Sobrescribir' : 'Upsert (actualizar/agregar por ID)';
-        showToast(`✅ Importación completada: ${totalImported} registros procesados (${modeLabel})`, 'success');
+        // Sincronizar y recalcular saldos de cuentas desde la economía importada
+        syncAccountBalancesFromEconomy();
 
-        // Recargar la app para que todas las secciones reflejen los nuevos datos
-        setTimeout(() => location.reload(), 1400);
+        const totalImported = newTasks.length + newTickets.length + newNetwork.length + newEconomy.length + newDebts.length + newActivities.length;
+        const modeLabel = mode === 'overwrite' ? 'Reemplazo total purgado' : 'Upsert (actualizar/agregar por ID)';
+        showToast(`✅ Importación completada. Saldos de cuentas y Activos Totales recalculados. (${modeLabel})`, 'success');
+
+        loadAll();
+        if (typeof loadDebts === 'function') loadDebts();
+        safeUIRefresh();
+        if (typeof renderTasks === 'function') renderTasks();
+        if (typeof renderTickets === 'function') renderTickets();
+        if (typeof renderNetwork === 'function') renderNetwork();
+        if (typeof renderEconomy === 'function') renderEconomy();
+        if (typeof renderDebts === 'function') renderDebts();
+        if (typeof renderDashboard === 'function') renderDashboard();
+        if (typeof updateSidebarBadges === 'function') updateSidebarBadges();
+
+        setTimeout(() => location.reload(), 1200);
 
       } catch (err) {
-        showToast('❌ Error al importar: ' + err.message, 'error');
-        console.error('Import Excel error:', err);
+        rollback(err.message);
       }
     };
     reader.readAsArrayBuffer(file);
   }
 }
 
-
 // ═══════════════════════════════════════════
-//  PLANTILLA DE IMPORTACIÓN VACÍA
+//  PLANTILLA DE IMPORTACIÓN VACÍA (TODOS LOS MÓDULOS Y SALDOS)
 // ═══════════════════════════════════════════
 
 function downloadImportTemplate() {
@@ -4224,107 +4576,89 @@ function downloadImportTemplate() {
 
   const wb = XLSX.utils.book_new();
 
-  // 1. Instrucciones (primera pestaña)
+  // 1. Instrucciones
   const instrSheet = XLSX.utils.aoa_to_sheet([
-    ['📌 INSTRUCCIONES DE USO — Plantilla de Importación EJCP TaskMaster v3.0'],
+    ['📌 INSTRUCCIONES DE USO — Plantilla de Importación Masiva EJCP TaskMaster v3.0'],
     [''],
     ['PASO 1:', 'Abre este archivo en Microsoft Excel o Google Sheets.'],
-    ['PASO 2:', 'Ve a la hoja (pestaña) que deseas completar. Cada hoja = una sección del sistema.'],
-    ['PASO 3:', 'Rellena los datos desde la FILA 3 hacia abajo. La fila 2 tiene encabezados, la fila 3 es un ejemplo reemplazable.'],
-    ['PASO 4:', 'La columna "ID" puede dejarse vacía — el sistema genera un ID único automáticamente.'],
+    ['PASO 2:', 'Completa las pestañas: Tasks, Tickets, Network, Economy, Deudas, Actividades.'],
+    ['PASO 3:', 'En la pestaña Configuracion_y_Perfil puedes indicar tus saldos iniciales en Binance, AIRTM, Zinli, Bolívares y Efectivo.'],
+    ['PASO 4:', 'Tasa global predeterminada: 755.9.'],
     ['PASO 5:', 'Guarda el archivo como .xlsx y súbelo en: Base de Datos General → Importar.'],
     [''],
-    ['REGLA 1:', 'NO cambies el nombre de las hojas/pestañas. El sistema las reconoce por nombre exacto.'],
-    ['REGLA 2:', 'Las fechas SIEMPRE en formato YYYY-MM-DD (ejemplo: 2026-08-07).'],
-    ['REGLA 3:', 'Modo Upsert: si un ID ya existe actualiza ese registro; si no existe lo agrega nuevo.'],
-    [''],
-    ['HOJAS DISPONIBLES:'],
-    ['  Cuentas_y_Economia',    '→ Transacciones financieras (ingresos, egresos, traslados)'],
-    ['  Deudas_y_Abonos',       '→ Control de acreedores y pagos en bolívares'],
-    ['  Tareas_y_Pendientes',   '→ Tareas personales y profesionales'],
-    ['  Tickets_Soporte_IT',    '→ Incidencias y tickets de soporte TI'],
-    ['  Caidas_de_Red',         '→ Incidentes de conectividad ISP'],
-    ['  Configuracion_y_Perfil','→ Datos del perfil y tasas de cambio'],
+    ['PESTAÑAS DISPONIBLES:'],
+    ['  Tasks',                 '→ Tareas operativas y pendientes'],
+    ['  Tickets',               '→ Soporte técnico e incidencias'],
+    ['  Network',               '→ Eventos y fallas de red ISP'],
+    ['  Economy',               '→ Transacciones financieras y finanzas'],
+    ['  Deudas_y_Abonos',       '→ Control de acreedores y deudas'],
+    ['  Actividades_y_Salud',   '→ Ejercicios y registro de bienestar'],
+    ['  Configuracion_y_Perfil','→ Tasa de cambio global, saldos de cuentas y perfil'],
     [''],
     ['Generado:', new Date().toLocaleString('es-VE')],
     ['Sistema:',  'EJCP TaskMaster — Edwin José Colmenares Pacheco']
   ]);
   instrSheet['!cols'] = [{ wch: 30 }, { wch: 80 }];
-  XLSX.utils.book_append_sheet(wb, instrSheet, '\uD83D\uDCCC Instrucciones');
+  XLSX.utils.book_append_sheet(wb, instrSheet, '📌 Instrucciones');
 
-  // 2. Cuentas_y_Economia
+  // 2. Tasks
+  const taskSheet = XLSX.utils.aoa_to_sheet([
+    ['id', 'title', 'desc', 'date', 'priority', 'category', 'tags', 'done', 'createdAt', 'updatedAt'],
+    ['', '', '', '', '', '', '', '', '', '']
+  ]);
+  taskSheet['!cols'] = [{wch:14},{wch:36},{wch:40},{wch:12},{wch:10},{wch:14},{wch:20},{wch:10},{wch:20},{wch:20}];
+  XLSX.utils.book_append_sheet(wb, taskSheet, 'Tasks');
+
+  // 3. Tickets
+  const ticketSheet = XLSX.utils.aoa_to_sheet([
+    ['id', 'number', 'date', 'timeOpen', 'timeClose', 'desc', 'provider', 'assignee', 'status', 'solution', 'category'],
+    ['', '', '', '', '', '', '', '', '', '', '']
+  ]);
+  ticketSheet['!cols'] = [{wch:14},{wch:14},{wch:12},{wch:10},{wch:10},{wch:40},{wch:18},{wch:22},{wch:10},{wch:30},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, ticketSheet, 'Tickets');
+
+  // 4. Network
+  const netSheet = XLSX.utils.aoa_to_sheet([
+    ['id', 'netId', 'type', 'startDate', 'endDate', 'area', 'status', 'cause', 'desc', 'reportTo'],
+    ['', '', '', '', '', '', '', '', '', '']
+  ]);
+  netSheet['!cols'] = [{wch:14},{wch:14},{wch:12},{wch:20},{wch:20},{wch:16},{wch:10},{wch:14},{wch:40},{wch:18}];
+  XLSX.utils.book_append_sheet(wb, netSheet, 'Network');
+
+  // 5. Economy
   const econSheet = XLSX.utils.aoa_to_sheet([
-    ['\uD83D\uDCB0 SECCIÓN: Cuentas_y_Economia — Una fila por movimiento. Tipo: ingreso / egreso / traslado / pago_movil / zinli'],
-    ['ID',           'Tipo',     'Monto_USD', 'Monto_VES', 'Tasa_Aplicada', 'Cuenta_Origen', 'Cuenta_Destino', 'Descripcion',                  'Fecha'],
-    ['(vacío=auto)', 'ingreso',  350.00,      13370.00,    38.20,           'Binance',        'AIRTM',          'Ejemplo — borrar esta fila',    '2026-08-07'],
-    ['(vacío=auto)', '',         '',          '',          '',              '',               '',               '',                              ''],
-    ['(vacío=auto)', '',         '',          '',          '',              '',               '',               '',                              ''],
-    ['(vacío=auto)', '',         '',          '',          '',              '',               '',               '',                              ''],
-    ['(vacío=auto)', '',         '',          '',          '',              '',               '',               '',                              '']
+    ['id', 'type', 'amount', 'rate', 'amountVes', 'account', 'fromAccount', 'toAccount', 'category', 'desc', 'date', 'notes', 'feePct', 'feeAmt', 'arrives'],
+    ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '']
   ]);
-  econSheet['!cols'] = [{wch:14},{wch:12},{wch:11},{wch:11},{wch:14},{wch:14},{wch:16},{wch:40},{wch:12}];
-  XLSX.utils.book_append_sheet(wb, econSheet, 'Cuentas_y_Economia');
+  econSheet['!cols'] = [{wch:14},{wch:10},{wch:11},{wch:10},{wch:12},{wch:14},{wch:14},{wch:14},{wch:14},{wch:40},{wch:12},{wch:20},{wch:8},{wch:8},{wch:11}];
+  XLSX.utils.book_append_sheet(wb, econSheet, 'Economy');
 
-  // 3. Deudas_y_Abonos
+  // 6. Deudas
   const debtSheet = XLSX.utils.aoa_to_sheet([
-    ['\uD83D\uDD34 SECCIÓN: Deudas_y_Abonos — Una fila por acreedor. Estado: pendiente / pagada'],
-    ['ID',           'Acreedor',                    'Monto_Inicial_USD', 'Monto_Restante_USD', 'Total_Pagado_VES', 'Fecha_Registro', 'Estado'],
-    ['(vacío=auto)', 'Ejemplo deuda — borrar fila', 200.00,             150.00,               1825.00,            '2026-08-07',     'pendiente'],
-    ['(vacío=auto)', '',                            '',                 '',                   '',                 '',              ''],
-    ['(vacío=auto)', '',                            '',                 '',                   '',                 '',              ''],
-    ['(vacío=auto)', '',                            '',                 '',                   '',                 '',              '']
+    ['ID', 'Acreedor', 'Monto_Inicial_USD', 'Monto_Restante_USD', 'Total_Pagado_VES', 'Fecha_Registro', 'Estado'],
+    ['', '', '', '', '', '', '']
   ]);
-  debtSheet['!cols'] = [{wch:14},{wch:34},{wch:18},{wch:20},{wch:18},{wch:15},{wch:14}];
+  debtSheet['!cols'] = [{wch:14},{wch:36},{wch:18},{wch:20},{wch:18},{wch:15},{wch:14}];
   XLSX.utils.book_append_sheet(wb, debtSheet, 'Deudas_y_Abonos');
 
-  // 4. Tareas_y_Pendientes
-  const taskSheet = XLSX.utils.aoa_to_sheet([
-    ['\uD83D\uDCCB SECCIÓN: Tareas_y_Pendientes — Prioridad: alta / media / baja. Completada: SI / NO. Categoria: general / it / salud / hogar'],
-    ['ID',           'Titulo',                       'Categoria', 'Prioridad', 'Completada', 'Fecha'],
-    ['(vacío=auto)', 'Ejemplo tarea — borrar fila',  'it',        'alta',      'NO',         '2026-08-07'],
-    ['(vacío=auto)', '',                             '',          '',          '',           ''],
-    ['(vacío=auto)', '',                             '',          '',          '',           ''],
-    ['(vacío=auto)', '',                             '',          '',          '',           ''],
-    ['(vacío=auto)', '',                             '',          '',          '',           '']
+  // 7. Actividades
+  const actSheet = XLSX.utils.aoa_to_sheet([
+    ['ID', 'Ejercicio', 'Categoria', 'Duracion_Min', 'Calorias', 'Fecha', 'Notas'],
+    ['', '', '', '', '', '', '']
   ]);
-  taskSheet['!cols'] = [{wch:14},{wch:44},{wch:18},{wch:12},{wch:12},{wch:12}];
-  XLSX.utils.book_append_sheet(wb, taskSheet, 'Tareas_y_Pendientes');
+  actSheet['!cols'] = [{wch:14},{wch:32},{wch:16},{wch:14},{wch:12},{wch:12},{wch:30}];
+  XLSX.utils.book_append_sheet(wb, actSheet, 'Actividades_y_Salud');
 
-  // 5. Tickets_Soporte_IT
-  const ticketSheet = XLSX.utils.aoa_to_sheet([
-    ['\uD83C\uDFAB SECCIÓN: Tickets_Soporte_IT — Estado: abierto / en_progreso / cerrado / escalado'],
-    ['ID',           'Titulo',                        'Estado',   'Prioridad', 'Asignado',          'Fecha_Creacion'],
-    ['(vacío=auto)', 'Ejemplo ticket — borrar fila',  'abierto',  'alta',      'Edwin Colmenares',  '2026-08-07'],
-    ['(vacío=auto)', '',                              '',         '',          '',                  ''],
-    ['(vacío=auto)', '',                              '',         '',          '',                  ''],
-    ['(vacío=auto)', '',                              '',         '',          '',                  '']
-  ]);
-  ticketSheet['!cols'] = [{wch:14},{wch:44},{wch:14},{wch:12},{wch:22},{wch:15}];
-  XLSX.utils.book_append_sheet(wb, ticketSheet, 'Tickets_Soporte_IT');
-
-  // 6. Caidas_de_Red
-  const netSheet = XLSX.utils.aoa_to_sheet([
-    ['\uD83C\uDF10 SECCIÓN: Caidas_de_Red — Tipo: total / parcial / lenta. Estado: activa / resuelta'],
-    ['ID',           'Evento',                         'Proveedor_ISP',   'Duracion', 'Fecha',      'Tipo',  'Estado'],
-    ['(vacío=auto)', 'Ejemplo incidente — borrar fila', 'Inter / NetUno', '2h 30m',   '2026-08-07', 'total', 'resuelta'],
-    ['(vacío=auto)', '',                               '',                '',          '',           '',      ''],
-    ['(vacío=auto)', '',                               '',                '',          '',           '',      ''],
-    ['(vacío=auto)', '',                               '',                '',          '',           '',      '']
-  ]);
-  netSheet['!cols'] = [{wch:14},{wch:40},{wch:18},{wch:12},{wch:12},{wch:10},{wch:12}];
-  XLSX.utils.book_append_sheet(wb, netSheet, 'Caidas_de_Red');
-
-  // 7. Configuracion_y_Perfil
+  // 8. Configuracion_y_Perfil con campos de Saldos
   const configSheet = XLSX.utils.aoa_to_sheet([
-    ['\u2699\uFE0F SECCIÓN: Configuracion_y_Perfil — Solo edita la fila 3 con tus datos reales'],
-    ['Usuario',                        'Email',                               'Telefono',             'Ubicacion',                    'Tasa_BCV', 'Tasa_Binance', 'Tasa_Airtm'],
-    ['Edwin José Colmenares Pacheco',  'edwinjosecolmenares28@hotmail.com',   '+58 (0414) 135-6815',  'Guatire, Miranda, Venezuela',  36.50,      38.20,          38.10]
+    ['Usuario', 'Email', 'Telefono', 'Ubicacion', 'Tasa_BCV', 'Tasa_Binance', 'Tasa_Airtm', 'Saldo_Binance', 'Saldo_AIRTM', 'Saldo_Zinli', 'Saldo_Bolivares', 'Saldo_Efectivo'],
+    ['Edwin José Colmenares Pacheco', 'edwinjosecolmenares28@hotmail.com', '+58 (0414) 135-6815', 'Guatire, Miranda, Venezuela', 755.90, 755.90, 755.90, 0, 0, 0, 0, 0]
   ]);
-  configSheet['!cols'] = [{wch:32},{wch:40},{wch:22},{wch:32},{wch:10},{wch:14},{wch:12}];
+  configSheet['!cols'] = [{wch:32},{wch:40},{wch:22},{wch:32},{wch:10},{wch:14},{wch:12},{wch:14},{wch:14},{wch:12},{wch:16},{wch:14}];
   XLSX.utils.book_append_sheet(wb, configSheet, 'Configuracion_y_Perfil');
 
   XLSX.writeFile(wb, 'Plantilla_Importacion_EJCP_TaskMaster.xlsx');
-  showToast('\uD83D\uDCCB \u00a1Plantilla descargada! Abre el archivo, rellena los datos desde la fila 3 y s\u00fAbela en "Importar".', 'success');
+  showToast('📋 ¡Plantilla completa descargada con saldos de cuentas!', 'success');
 }
 
 // ═══════════════════════════════════════════
@@ -4333,33 +4667,31 @@ function downloadImportTemplate() {
 
 function clearAllSystemData() {
   if (!confirm(
-    '\u26A0\uFE0F ATENCI\u00d3N: Se eliminar\u00e1n permanentemente:\n\n' +
-    '  \u2022 Todas las transacciones financieras\n' +
-    '  \u2022 Todas las tareas y pendientes\n' +
-    '  \u2022 Todos los tickets de soporte IT\n' +
-    '  \u2022 Todas las ca\u00eddas de red\n' +
-    '  \u2022 Todas las deudas y abonos\n' +
-    '  \u2022 Configuraci\u00f3n de tasas y perfil\n\n' +
-    'El portafolio profesional NO ser\u00e1 eliminado.\n\n' +
-    '\u00bfDeseas continuar?'
+    '⚠️ ATENCIÓN: Se eliminarán permanentemente:\n\n' +
+    '  • Todas las transacciones financieras\n' +
+    '  • Todas las tareas y pendientes\n' +
+    '  • Todos los tickets de soporte IT\n' +
+    '  • Todas las caídas de red\n' +
+    '  • Todas las deudas y abonos\n' +
+    '  • Configuración de tasas y perfil\n\n' +
+    'El portafolio profesional NO será eliminado.\n\n' +
+    '¿Deseas continuar?'
   )) return;
 
-  if (!confirm('\uD83D\uDD34 \u00daCIMA ADVERTENCIA \u2014 Esta acci\u00f3n NO se puede deshacer.\n\n\u00bfConfirmas vaciar todo el sistema?')) {
-    showToast('\u274c Operaci\u00f3n cancelada. Ning\u00FAn dato fue eliminado.', 'info');
+  if (!confirm('🔴 ÚLTIMA ADVERTENCIA — Esta acción NO se puede deshacer.\n\n¿Confirmas vaciar todo el sistema?')) {
+    showToast('❌ Operación cancelada. Ningún dato fue eliminado.', 'info');
     return;
   }
 
-  // Reset account balances to zero
   const resetAccounts = {
-    binance:   { name: 'Binance',   cur: 'USDT', emoji: '🟡', balance: 0 },
-    airtm:     { name: 'AIRTM',    cur: 'USD',  emoji: '💙', balance: 0 },
-    zinli:     { name: 'Zinli',    cur: 'USD',  emoji: '🟣', balance: 0 },
-    bolivares: { name: 'Bolívares', cur: 'VES',  emoji: '🇻🇪', balance: 0 },
-    efectivo:  { name: 'Efectivo', cur: 'USD',  emoji: '💵', balance: 0 }
+    binance:   { name: 'Binance',   cur: 'USDT', emoji: '🟡', balance: 0, baseBalance: 0 },
+    airtm:     { name: 'AIRTM',    cur: 'USD',  emoji: '💙', balance: 0, baseBalance: 0 },
+    zinli:     { name: 'Zinli',    cur: 'USD',  emoji: '🟣', balance: 0, baseBalance: 0 },
+    bolivares: { name: 'Bolívares', cur: 'VES',  emoji: '🇻🇪', balance: 0, baseBalance: 0 },
+    efectivo:  { name: 'Efectivo', cur: 'USD',  emoji: '💵', balance: 0, baseBalance: 0 }
   };
   toLS('ejcp_accounts', resetAccounts);
 
-  // Store empty arrays explicitly so loadAll() does not reload sample defaults
   toLS('ejcp_economy', []);
   toLS('ejcp_tasks', []);
   toLS('ejcp_tickets', []);
@@ -4377,4 +4709,52 @@ function clearAllSystemData() {
 
   showToast('🗑️ Sistema vaciado completamente. Los datos quedan en $0.00 en todas las secciones.', 'success');
   setTimeout(function() { location.reload(); }, 1000);
+}
+
+// ═══════════════════════════════════════════
+//  RESTAURAR DATOS DE DEMOSTRACIÓN
+// ═══════════════════════════════════════════
+
+function seedSampleData() {
+  localStorage.removeItem('ejcp_cleared');
+
+  const globalRate = 755.90;
+  toLS('ejcp_rate_bcv', globalRate);
+  toLS('ejcp_rate_binance', globalRate);
+  toLS('ejcp_rate_airtm', globalRate);
+  APP.rateBCV = globalRate; APP.rateBinance = globalRate; APP.rateAirtm = globalRate; APP.rate = globalRate;
+
+  const txs = [
+    { id: 'tx-1', type: 'ingreso', amount: 350.00, amountVes: 264565.00, rate: 755.90, origin: 'Binance', dest: 'Binance', account: 'Binance', desc: 'Pago por Proyecto Web Vettal', date: toLocalDate(new Date()) },
+    { id: 'tx-2', type: 'egreso', amount: 80.00, amountVes: 60472.00, rate: 755.90, origin: 'Bolívares', dest: 'Bolívares', account: 'Bolívares', desc: 'Compra de Repuestos de Red', date: toLocalDate(new Date()) }
+  ];
+  toLS('ejcp_economy', txs);
+
+  const debts = [
+    { id: 'd-1', creditor: 'Préstamo Equipos de Red Cisco', name: 'Préstamo Equipos de Red Cisco', initialAmount: 200.00, originalAmount: 200.00, remainingAmount: 150.00, amount: 150.00, totalPaidVes: 37795.00, date: toLocalDate(new Date()), status: 'pendiente', payments: [{ id: 'p-1', date: toLocalDate(new Date()), vesAmount: 37795.00, rate: 755.90, usdAmount: 50.00 }] }
+  ];
+  toLS('ejcp_debts', debts);
+
+  const tasks = [
+    { id: 'tk-1', title: 'Auditar servidor pfSense ALTECEL', desc: 'Pruebas del sistema Vettal', category: 'it', priority: 'alta', done: false, date: toLocalDate(new Date()), tags: ['vettal','pfsense'] },
+    { id: 'tk-2', title: 'Generar backup mensual en Excel', desc: 'Carga masiva de 4 pestañas', category: 'general', priority: 'media', done: true, date: toLocalDate(new Date()), tags: ['backup','excel'] }
+  ];
+  toLS('ejcp_tasks', tasks);
+
+  const tickets = [
+    { id: 'tck-1', number: 'TICK-1001', title: 'Falla enlace principal Inter Fibra Guatire', desc: 'Falla enlace principal Inter Fibra Guatire', status: 'cerrado', priority: 'alta', assignee: 'EDWIN COLMENARES', provider: 'Inter Fibra', solution: 'Reemplazo de conector óptico', category: 'red', date: toLocalDate(new Date()), timeOpen: '09:00', timeClose: '11:30', createdAt: toLocalDate(new Date()) }
+  ];
+  toLS('ejcp_tickets', tickets);
+
+  const network = [
+    { id: 'net-1', netId: 'NET-001', title: 'Corte de fibra óptica Guatire', description: 'Corte de fibra óptica Guatire', isp: 'Inter Fibra', duration: '2h 30m', startDate: new Date().toISOString(), endDate: new Date().toISOString(), type: 'total', status: 'resuelta', area: 'Guatire', cause: 'ISP', reportTo: 'Soporte ISP' }
+  ];
+  toLS('ejcp_network', network);
+
+  syncAccountBalancesFromEconomy();
+
+  showToast('⚡ ¡Datos de demostración cargados y sincronizados a tasa 755.9!', 'success');
+  loadAll();
+  safeUIRefresh();
+  setTimeout(() => location.reload(), 800);
 }
