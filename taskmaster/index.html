@@ -11,7 +11,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script>if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -67,6 +67,9 @@
     </button>
     <button class="nav-btn" id="nav-register" onclick="switchModule('register')">
       <span class="nav-icon">👤</span><span class="nav-label">Registrar Usuario</span>
+    </button>
+    <button class="nav-btn" id="nav-admin" onclick="switchModule('admin')">
+      <span class="nav-icon">👑</span><span class="nav-label">Panel de Admin</span>
     </button>
 
     <div class="nav-section-label">Gestión</div>
@@ -1905,26 +1908,17 @@
           <input type="text" id="reg-name" placeholder="Ej: Juan Pérez / Soporte Redes" style="width:100%;padding:12px 14px;background:rgba(255,255,255,0.05);border:1px solid var(--border-light);border-radius:10px;color:var(--text-primary);font-size:13px">
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-          <div>
-            <label style="display:block;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px">Avatar / Emoji Representativo</label>
-            <select id="reg-avatar" style="width:100%;padding:12px 14px;background:rgba(15,23,42,0.9);border:1px solid var(--border-light);border-radius:10px;color:var(--text-primary);font-size:13px">
-              <option value="👤">👤 Usuario Estándar</option>
-              <option value="👨‍💻">👨‍💻 Desarrollador / Admin</option>
-              <option value="👩‍💻">👩‍💻 Especialista IT</option>
-              <option value="🚀">🚀 Proyectos</option>
-              <option value="💼">💼 Ejecutivo</option>
-              <option value="⚡">⚡ Soporte Técnico</option>
-              <option value="🎨">🎨 Diseñador Web</option>
-            </select>
-          </div>
-          <div>
-            <label style="display:block;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px">Rol del Usuario</label>
-            <select id="reg-role" style="width:100%;padding:12px 14px;background:rgba(15,23,42,0.9);border:1px solid var(--border-light);border-radius:10px;color:var(--text-primary);font-size:13px">
-              <option value="secundario">Secundario (Cliente / Invitado)</option>
-              <option value="principal">Principal (Administrador)</option>
-            </select>
-          </div>
+        <div style="margin-bottom:16px">
+          <label style="display:block;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px">Avatar / Emoji Representativo</label>
+          <select id="reg-avatar" style="width:100%;padding:12px 14px;background:rgba(15,23,42,0.9);border:1px solid var(--border-light);border-radius:10px;color:var(--text-primary);font-size:13px">
+            <option value="👤">👤 Usuario Estándar</option>
+            <option value="👨‍💻">👨‍💻 Desarrollador / Admin</option>
+            <option value="👩‍💻">👩‍💻 Especialista IT</option>
+            <option value="🚀">🚀 Proyectos</option>
+            <option value="💼">💼 Ejecutivo</option>
+            <option value="⚡">⚡ Soporte Técnico</option>
+            <option value="🎨">🎨 Diseñador Web</option>
+          </select>
         </div>
 
         <div style="margin-bottom:20px">
@@ -1943,6 +1937,66 @@
           <button type="submit" class="btn-primary" style="padding:12px 24px;background:var(--accent);color:#070913;font-weight:800;border:none;border-radius:10px;cursor:pointer">🚀 Crear Usuario y Conectar Ahora</button>
         </div>
       </form>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ MÓDULO PANEL DE ADMINISTRACIÓN DE USUARIOS ═══════════ -->
+<section class="app-section" id="sec-admin" style="display:none">
+  <div style="padding:24px 28px 100px;max-width:960px;margin:0 auto">
+    <div class="dash-panel" style="background:rgba(15,23,42,0.7);border:1px solid var(--border-light);border-radius:18px;padding:26px;margin-bottom:24px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border-light)">
+        <div style="display:flex;align-items:center;gap:14px">
+          <div style="width:50px;height:50px;border-radius:14px;background:linear-gradient(135deg,#f59e0b,#d97706);display:flex;align-items:center;justify-content:center;font-size:26px;color:#070913;font-weight:900">👑</div>
+          <div>
+            <h2 style="font-size:20px;font-weight:800;color:var(--text-primary);margin:0">Panel de Administración de Usuarios</h2>
+            <p style="font-size:12px;color:var(--text-muted);margin:4px 0 0">Gestión centralizada de usuarios registrados, auditoría, permisos y prueba del chat en tiempo real</p>
+          </div>
+        </div>
+        <button onclick="fetchAutomaticRates()" class="btn-secondary" style="font-size:12px;display:flex;align-items:center;gap:6px">
+          ⚡ Actualizar Tasas por API
+        </button>
+      </div>
+
+      <!-- Buscador en tiempo real para Vercel -->
+      <div style="margin-bottom:20px">
+        <label style="display:block;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px">🔎 Buscador Inteligente de Usuarios en Tiempo Real (Vercel / Multi-Dispositivo)</label>
+        <input type="text" id="admin-user-search-input" oninput="renderAdminUsersTable()" placeholder="Buscar por Nombre, Correo o Usuario..." style="width:100%;padding:12px 16px;background:rgba(255,255,255,0.05);border:1px solid var(--border-light);border-radius:10px;color:var(--text-primary);font-size:13px">
+      </div>
+
+      <!-- Métricas rápidas de usuarios -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:20px">
+        <div style="padding:14px;background:rgba(255,255,255,0.03);border:1px solid var(--border-light);border-radius:12px">
+          <div style="font-size:11px;color:var(--text-muted)">Total Usuarios Registrados</div>
+          <div style="font-size:22px;font-weight:800;color:var(--accent)" id="admin-stat-total-users">0</div>
+        </div>
+        <div style="padding:14px;background:rgba(255,255,255,0.03);border:1px solid var(--border-light);border-radius:12px">
+          <div style="font-size:11px;color:var(--text-muted)">Usuarios Principales (Admin)</div>
+          <div style="font-size:22px;font-weight:800;color:var(--green)" id="admin-stat-admin-users">0</div>
+        </div>
+        <div style="padding:14px;background:rgba(255,255,255,0.03);border:1px solid var(--border-light);border-radius:12px">
+          <div style="font-size:11px;color:var(--text-muted)">Tasa USD / VES (API)</div>
+          <div style="font-size:22px;font-weight:800;color:var(--amber)" id="admin-stat-auto-rate">0.00 VES</div>
+        </div>
+      </div>
+
+      <!-- Tabla de usuarios -->
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;text-align:left">
+          <thead>
+            <tr style="border-bottom:1px solid var(--border-light);color:var(--text-muted);font-size:11px;text-transform:uppercase">
+              <th style="padding:10px">Usuario</th>
+              <th style="padding:10px">Correo Electrónico</th>
+              <th style="padding:10px">Rol</th>
+              <th style="padding:10px">Estado BD</th>
+              <th style="padding:10px;text-align:right">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="admin-users-tbody">
+            <!-- Rendered dynamically -->
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </section>
@@ -1968,7 +2022,7 @@
 </div>
 
 <!-- ═══════════ MODAL AUTENTICACIÓN / REGISTRO / PERFIL ═══════════ -->
-<div class="modal-overlay" id="modal-auth" style="display:none">
+<div class="modal-overlay" id="modal-auth" style="display:none;z-index:10005">
   <div class="modal glass-modal" style="max-width:500px;width:92%">
     <div class="modal-header">
       <h3 id="auth-modal-title">🔐 Iniciar Sesión</h3>
@@ -2000,26 +2054,17 @@
             <input type="text" id="auth-name" placeholder="Ej: EDWIN COLMENARES / Soporte Técnico" style="width:100%;padding:11px 14px;background:rgba(255,255,255,0.05);border:1px solid var(--border-light);border-radius:10px;color:var(--text-primary);font-size:13px">
           </div>
 
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
-            <div>
-              <label style="display:block;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px">Avatar / Emoji</label>
-              <select id="auth-avatar" style="width:100%;padding:11px 14px;background:rgba(15,23,42,0.9);border:1px solid var(--border-light);border-radius:10px;color:var(--text-primary);font-size:13px">
-                <option value="👤">👤 Usuario Estándar</option>
-                <option value="👨‍💻">👨‍💻 Desarrollador / Admin</option>
-                <option value="👩‍💻">👩‍💻 Especialista IT</option>
-                <option value="🚀">🚀 Proyectos</option>
-                <option value="💼">💼 Ejecutivo</option>
-                <option value="⚡">⚡ Soporte Técnico</option>
-                <option value="🎨">🎨 Diseñador Web</option>
-              </select>
-            </div>
-            <div>
-              <label style="display:block;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px">Rol del Usuario</label>
-              <select id="auth-role" style="width:100%;padding:11px 14px;background:rgba(15,23,42,0.9);border:1px solid var(--border-light);border-radius:10px;color:var(--text-primary);font-size:13px">
-                <option value="secundario">Secundario (Cliente / Invitado)</option>
-                <option value="principal">Principal (Administrador)</option>
-              </select>
-            </div>
+          <div style="margin-bottom:14px">
+            <label style="display:block;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px">Avatar / Emoji</label>
+            <select id="auth-avatar" style="width:100%;padding:11px 14px;background:rgba(15,23,42,0.9);border:1px solid var(--border-light);border-radius:10px;color:var(--text-primary);font-size:13px">
+              <option value="👤">👤 Usuario Estándar</option>
+              <option value="👨‍💻">👨‍💻 Desarrollador / Admin</option>
+              <option value="👩‍💻">👩‍💻 Especialista IT</option>
+              <option value="🚀">🚀 Proyectos</option>
+              <option value="💼">💼 Ejecutivo</option>
+              <option value="⚡">⚡ Soporte Técnico</option>
+              <option value="🎨">🎨 Diseñador Web</option>
+            </select>
           </div>
 
           <div style="margin-bottom:14px">
@@ -2033,6 +2078,18 @@
             </label>
           </div>
         </div>
+
+        <!-- Divisor y Botón de Inicio de Sesión con Google -->
+        <div style="margin:16px 0 14px;display:flex;align-items:center;gap:10px">
+          <div style="flex:1;height:1px;background:var(--border-light)"></div>
+          <span style="font-size:11px;color:var(--text-muted);font-weight:700">O INICIA SESIÓN CON</span>
+          <div style="flex:1;height:1px;background:var(--border-light)"></div>
+        </div>
+
+        <button type="button" onclick="triggerGoogleSignIn()" style="width:100%;padding:11px 16px;border-radius:10px;background:#ffffff;color:#1f2937;border:1px solid #e5e7eb;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,0.15);transition:all 0.2s ease">
+          <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+          Continuar con Google
+        </button>
 
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;border-top:1px solid var(--border-light);padding-top:14px">
           <button type="button" id="auth-switch-mode-btn" onclick="toggleAuthMode()" style="background:none;border:none;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;text-decoration:underline">
@@ -2067,6 +2124,91 @@
       <div style="display:flex;justify-content:flex-end;margin-top:14px;border-top:1px solid var(--border-light);padding-top:12px">
         <button class="btn-secondary" onclick="closeUserSessionsModal()">Cerrar</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ PANTALLA 100% EN BLANCO CUANDO NO HAY SESIÓN ═══════════ -->
+<div id="blank-lock-screen" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:#070913;z-index:9999;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center">
+  <div style="font-size:48px;margin-bottom:16px">🌟</div>
+  <h1 style="font-size:26px;font-weight:900;color:var(--text-primary);margin:0 0 8px">COSAS DE LA VIDA</h1>
+  <p style="font-size:13px;color:var(--text-muted);max-width:420px;margin:0 0 24px">La sesión ha sido cancelada o no se encuentra activa. La interfaz permanece 100% en blanco para proteger la privacidad.</p>
+  <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;justify-content:center">
+    <button onclick="openAuthModal('login')" class="btn-primary" style="padding:12px 24px;font-size:14px;font-weight:800">
+      🔑 Iniciar Sesión para Continuar
+    </button>
+    <button onclick="triggerGoogleSignIn()" style="padding:12px 24px;border-radius:10px;background:#ffffff;color:#1f2937;border:1px solid #e5e7eb;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,0.15)">
+      <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+      Iniciar con Google
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL CORREO DE BIENVENIDA PREVIEW ═══════════ -->
+<div class="modal-overlay" id="modal-welcome-email-preview" style="display:none;z-index:2300">
+  <div class="modal glass-modal" style="max-width:540px;width:92%">
+    <div class="modal-header">
+      <h3>✉️ Correo Electrónico de Bienvenida Enviado</h3>
+      <button class="modal-close" onclick="closeWelcomeEmailModal()">✕</button>
+    </div>
+    <div class="modal-body" style="padding:20px">
+      <div style="background:rgba(255,255,255,0.04);border:1px solid var(--border-light);border-radius:12px;padding:16px;margin-bottom:16px">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px"><strong>De:</strong> soporte@cosasdelavida.app</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px"><strong>Para:</strong> <span id="we-to-email">correo@ejemplo.com</span></div>
+        <div style="font-size:12px;font-weight:800;color:var(--accent);margin-top:6px" id="we-subject">¡Bienvenido a COSAS DE LA VIDA!</div>
+      </div>
+      <div id="we-body-content" style="font-size:13px;color:var(--text-primary);line-height:1.6;background:rgba(15,23,42,0.6);padding:16px;border-radius:12px;border:1px solid var(--border-light);white-space:pre-wrap">
+        <!-- Rendered dynamically -->
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:16px">
+        <button class="btn-primary" onclick="closeWelcomeEmailModal()">Comprendido</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL PERMISOS DE GASTOS ═══════════ -->
+<div class="modal-overlay" id="modal-expense-permissions" style="display:none;z-index:2250">
+  <div class="modal glass-modal" style="max-width:500px;width:92%">
+    <div class="modal-header">
+      <h3>🔐 Permisos de Visibilidad de Gastos</h3>
+      <button class="modal-close" onclick="closeExpensePermissionsModal()">✕</button>
+    </div>
+    <div class="modal-body" style="padding:20px">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">Selecciona qué usuarios están autorizados para visualizar tus registros de gastos compartidos y economía:</div>
+      <div id="expense-permissions-users-list" style="display:flex;flex-direction:column;gap:10px;max-height:280px;overflow-y:auto;margin-bottom:16px">
+        <!-- Rendered dynamically -->
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn-secondary" onclick="closeExpensePermissionsModal()">Cancelar</button>
+        <button class="btn-primary" onclick="saveExpensePermissions()">Guardar Permisos</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL CONECTAR CON CUENTA DE GOOGLE ═══════════ -->
+<div class="modal-overlay" id="modal-google-auth" style="display:none;z-index:10010">
+  <div class="modal glass-modal" style="max-width:440px;width:92%">
+    <div class="modal-header">
+      <h3 style="display:flex;align-items:center;gap:10px">
+        <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+        Iniciar Sesión con Google
+      </h3>
+      <button class="modal-close" onclick="closeGoogleAuthModal()">✕</button>
+    </div>
+    <div class="modal-body" style="padding:20px">
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px">Conéctate directamente con tu cuenta de Google para verificar tus datos e ingresar en 1-Clic:</p>
+      <form onsubmit="handleGoogleFormSubmit(event)">
+        <div style="margin-bottom:16px">
+          <label style="display:block;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px">Correo Electrónico de Google *</label>
+          <input type="email" id="google-auth-email-input" required value="ed11jo78@gmail.com" placeholder="ejemplo@gmail.com" style="width:100%;padding:12px 14px;background:rgba(255,255,255,0.05);border:1px solid var(--border-light);border-radius:10px;color:var(--text-primary);font-size:13px">
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <button type="button" class="btn-secondary" onclick="closeGoogleAuthModal()">Cancelar</button>
+          <button type="submit" class="btn-primary" style="background:#ffffff;color:#1f2937;font-weight:800">🌐 Autenticar con Google</button>
+        </div>
+      </form>
     </div>
   </div>
 </div>

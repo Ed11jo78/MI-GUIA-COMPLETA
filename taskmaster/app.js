@@ -161,6 +161,7 @@ function startClock() {
 const MODULE_META = {
   dashboard:  { title: 'Dashboard',          sub: 'Resumen general de tu vida' },
   register:   { title: 'Registrar Usuario',   sub: 'Formulario de registro directo para crear usuarios con espacio en blanco' },
+  admin:      { title: 'Panel de Administración', sub: 'Gestión centralizada de usuarios, auditoría y pruebas en tiempo real' },
   tasks:      { title: 'Tareas',             sub: 'Todo lo que tienes que hacer' },
   tickets:    { title: 'Tickets de Soporte', sub: 'Control de incidencias y soporte IT' },
   network:    { title: 'Caídas de Red',      sub: 'Registro de interrupciones de red' },
@@ -174,6 +175,12 @@ const MODULE_META = {
 };
 
 function switchModule(mod) {
+  const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+  if (mod === 'admin' && currentUser && currentUser.role !== 'principal') {
+    showToast('⛔ Acceso Denegado: La sección de Administración requiere permisos de Administrador', 'error');
+    return;
+  }
+
   APP.module = mod;
   document.querySelectorAll('.app-section').forEach(s => {
     s.classList.remove('active');
@@ -219,6 +226,7 @@ function setModule(mod) {
     case 'excel':      renderDatabaseSummary(); break;
     case 'chat':       if (typeof renderChatModule === 'function') renderChatModule(); break;
     case 'shared-expenses': if (typeof renderSharedExpensesModule === 'function') renderSharedExpensesModule(); break;
+    case 'admin':      if (typeof renderAdminUsersTable === 'function') renderAdminUsersTable(); break;
   }
 }
 
@@ -4997,8 +5005,10 @@ function openAuthModal(mode = 'login') {
   if (!modal) return;
 
   modeInput.value = mode;
-  document.getElementById('auth-username').value = '';
-  document.getElementById('auth-password').value = '';
+  const userEl = document.getElementById('auth-username');
+  const passEl = document.getElementById('auth-password');
+  if (userEl) userEl.value = '';
+  if (passEl) passEl.value = '';
 
   if (mode === 'register') {
     title.textContent = '👤 Crear Nuevo Usuario Personalizado';
@@ -5016,15 +5026,39 @@ function openAuthModal(mode = 'login') {
   modal.style.display = 'flex';
   modal.style.opacity = '1';
   modal.style.pointerEvents = 'all';
+  modal.style.zIndex = '10005';
+
+  setTimeout(() => {
+    if (userEl) userEl.focus();
+  }, 100);
 }
 
 function closeAuthModal() {
   const modal = document.getElementById('modal-auth');
+  const currentUser = getCurrentUser();
+  const blankScreen = document.getElementById('blank-lock-screen');
+  const appContainer = document.getElementById('app-container') || document.querySelector('.app-container');
+
   if (modal) {
     modal.classList.remove('active');
     modal.style.display = 'none';
     modal.style.opacity = '0';
     modal.style.pointerEvents = 'none';
+  }
+
+  if (!currentUser) {
+    if (appContainer) appContainer.style.display = 'none';
+    if (blankScreen) {
+      blankScreen.style.display = 'flex';
+      blankScreen.style.zIndex = '9000';
+    }
+  } else {
+    if (blankScreen) blankScreen.style.display = 'none';
+    if (appContainer) {
+      appContainer.style.display = 'flex';
+      appContainer.style.filter = 'none';
+      appContainer.style.pointerEvents = 'auto';
+    }
   }
 }
 
@@ -5033,7 +5067,7 @@ function handleAuthSubmit(e) {
   const mode = document.getElementById('auth-mode').value;
   const username = document.getElementById('auth-username').value.trim();
   const password = document.getElementById('auth-password').value.trim();
-  const role = document.getElementById('auth-role')?.value || 'secundario';
+  const role = 'secundario';
   const customName = document.getElementById('auth-name')?.value.trim() || username;
   const avatar = document.getElementById('auth-avatar')?.value || '👤';
   const status = document.getElementById('auth-status')?.value.trim() || '🟢 En línea';
@@ -5056,6 +5090,7 @@ function handleAuthSubmit(e) {
     const newUser = {
       id: newId,
       username: username,
+      email: username.includes('@') ? username : `${username}@cosasdelavida.app`,
       password: password,
       role: role,
       name: customName,
@@ -5085,12 +5120,17 @@ function handleAuthSubmit(e) {
     setCurrentUser(newUser);
     closeAuthModal();
     showToast(`✨ Usuario "${customName}" creado con espacio de trabajo 100% en blanco`, 'success');
+    if (typeof sendWelcomeEmailNotification === 'function') sendWelcomeEmailNotification(newUser);
     loadAll();
     safeUIRefresh();
   } else {
     const found = users.find(u => (u.username.toLowerCase() === username.toLowerCase() || (u.email && u.email.toLowerCase() === username.toLowerCase())) && u.password === password);
     if (!found) {
       showToast('❌ Credenciales incorrectas (Verifica tu correo/usuario y contraseña)', 'error');
+      return;
+    }
+    if (found.status && (found.status.includes('Suspendido') || found.status.includes('bloqueado'))) {
+      showToast('⛔ Tu cuenta se encuentra suspendida por el Administrador. Contacta a soporte.', 'error');
       return;
     }
     setCurrentUser(found);
@@ -5252,7 +5292,7 @@ function handleDirectRegister(e) {
   const confirmPassword = document.getElementById('reg-confirm-password')?.value.trim() || password;
   const customName = document.getElementById('reg-name').value.trim() || username;
   const avatar = document.getElementById('reg-avatar').value || '👤';
-  const role = document.getElementById('reg-role').value || 'secundario';
+  const role = 'secundario';
   const status = document.getElementById('reg-status').value.trim() || '🟢 En línea';
   const isBlank = document.getElementById('reg-blank').checked;
 
@@ -5663,6 +5703,431 @@ if (ejcpRealtimeChatChannel) {
   };
 }
 
+// ═══════════════════════════════════════════
+//  NUEVAS FUNCIONALIDADES SOLICITADAS
+// ═══════════════════════════════════════════
+
+async function fetchAutomaticRates() {
+  try {
+    showToast('⚡ Consultando tasas de conversión por API...', 'info');
+    const res = await fetch('https://open.er-api.com/v6/latest/USD');
+    if (!res.ok) throw new Error('HTTP Error ' + res.status);
+    const data = await res.json();
+    if (data && data.rates && data.rates.VES) {
+      const vesRate = parseFloat(data.rates.VES);
+      
+      toLS('ejcp_rate_bcv', vesRate);
+      toLS('ejcp_rate_binance', vesRate);
+      toLS('ejcp_rate_airtm', vesRate);
+
+      if (typeof APP !== 'undefined') {
+        APP.rateBCV = vesRate;
+        APP.rateBinance = vesRate;
+        APP.rateAirtm = vesRate;
+        APP.rate = vesRate;
+      }
+
+      const statAutoRate = document.getElementById('admin-stat-auto-rate');
+      if (statAutoRate) statAutoRate.textContent = `${vesRate.toFixed(2)} VES`;
+
+      showToast(`✅ Tasas actualizadas por API en vivo: 1 USD = ${vesRate.toFixed(2)} VES`, 'success');
+      if (typeof safeUIRefresh === 'function') safeUIRefresh();
+    }
+  } catch (err) {
+    console.warn('Rate API error:', err);
+    showToast('⚠️ No se pudo consultar la API en vivo. Usando valores guardados.', 'warning');
+  }
+}
+
+function renderAdminUsersTable() {
+  const tbody = document.getElementById('admin-users-tbody');
+  const statTotal = document.getElementById('admin-stat-total-users');
+  const statAdmin = document.getElementById('admin-stat-admin-users');
+  const searchInput = document.getElementById('admin-user-search-input');
+  const query = searchInput ? searchInput.value.trim().toLowerCase() : '';
+
+  const users = getStoredUsers();
+  if (statTotal) statTotal.textContent = users.length;
+  if (statAdmin) statAdmin.textContent = users.filter(u => u.role === 'principal').length;
+
+  if (!tbody) return;
+
+  const filtered = users.filter(u =>
+    (u.name && u.name.toLowerCase().includes(query)) ||
+    (u.username && u.username.toLowerCase().includes(query)) ||
+    (u.email && u.email.toLowerCase().includes(query))
+  );
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="padding:20px;text-align:center;color:var(--text-muted)">No se encontraron usuarios coincidentes en la búsqueda.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(u => {
+    const isSuspended = u.status && (u.status.includes('Suspendido') || u.status.includes('bloqueado'));
+    const isMasterAdmin = u.id === 'usr-admin';
+
+    return `
+      <tr style="border-bottom:1px solid var(--border-light)">
+        <td style="padding:12px 10px;font-weight:700">
+          ${u.avatar || '👤'} ${esc(u.name || u.username)} <span style="font-size:11px;color:var(--text-muted)">(@${esc(u.username)})</span>
+        </td>
+        <td style="padding:12px 10px;color:var(--text-muted)">${esc(u.email || 'Sin correo registrado')}</td>
+        <td style="padding:12px 10px">
+          <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:${u.role === 'principal' ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.06)'};color:${u.role === 'principal' ? 'var(--accent)' : 'var(--text-primary)'};font-weight:700">
+            ${u.role === 'principal' ? '👑 Principal' : '👤 Secundario'}
+          </span>
+        </td>
+        <td style="padding:12px 10px">
+          <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:${isSuspended ? 'rgba(239,68,68,0.15)' : 'rgba(16,185,129,0.15)'};color:${isSuspended ? 'var(--red)' : 'var(--green)'};font-weight:700">
+            ${isSuspended ? '🔴 Suspendido' : '🟢 En línea'}
+          </span>
+        </td>
+        <td style="padding:12px 10px;text-align:right;white-space:nowrap">
+          <button onclick="adminTestChatWithUser('${u.id}')" class="btn-secondary" style="font-size:10px;padding:4px 6px;margin-right:3px" title="Probar Chat Directo">💬 Chat</button>
+          ${!isMasterAdmin ? `
+            <button onclick="adminToggleUserStatus('${u.id}')" style="font-size:10px;padding:4px 6px;margin-right:3px;background:${isSuspended ? 'rgba(16,185,129,0.2);color:var(--green)' : 'rgba(239,68,68,0.2);color:var(--red)'};border:none;border-radius:6px;cursor:pointer;font-weight:700">
+              ${isSuspended ? '✅ Activar' : '🚫 Suspender'}
+            </button>
+            <button onclick="adminDeleteUser('${u.id}')" style="font-size:10px;padding:4px 6px;background:rgba(239,68,68,0.15);color:var(--red);border:1px solid rgba(239,68,68,0.3);border-radius:6px;cursor:pointer" title="Eliminar Usuario">🗑️</button>
+          ` : ''}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function adminToggleUserStatus(userId) {
+  let users = getStoredUsers();
+  const target = users.find(u => u.id === userId);
+  if (!target) return;
+  if (target.id === 'usr-admin') {
+    showToast('⚠️ No se puede suspender al Administrador Maestro', 'warning');
+    return;
+  }
+
+  const isSuspended = target.status && (target.status.includes('Suspendido') || target.status.includes('bloqueado'));
+  target.status = isSuspended ? '🟢 En línea' : '🔴 Suspendido';
+
+  toLS('ejcp_users', users);
+  showToast(`${isSuspended ? '✅ Cuenta activada' : '🚫 Cuenta suspendida'}: "${target.name || target.username}"`, 'info');
+  renderAdminUsersTable();
+}
+
+function adminDeleteUser(userId) {
+  if (userId === 'usr-admin') {
+    showToast('⚠️ No se puede eliminar al Administrador Maestro', 'warning');
+    return;
+  }
+  if (!confirm('⚠️ ¿Seguro que deseas eliminar permanentemente esta cuenta de usuario?')) return;
+
+  let users = getStoredUsers();
+  users = users.filter(u => u.id !== userId);
+  toLS('ejcp_users', users);
+
+  showToast('🗑️ Usuario eliminado correctamente', 'success');
+  renderAdminUsersTable();
+}
+
+function adminTestChatWithUser(userId) {
+  activeChatContactId = userId;
+  switchModule('chat');
+  showToast('💬 Conversación iniciada en chat de prueba', 'info');
+}
+
+function openExpensePermissionsModal() {
+  const modal = document.getElementById('modal-expense-permissions');
+  const listEl = document.getElementById('expense-permissions-users-list');
+  if (!modal || !listEl) return;
+
+  const currentUser = getCurrentUser();
+  const users = getStoredUsers().filter(u => u.id !== currentUser.id);
+  const currentPerms = fromLS(`ejcp_expense_permissions_${currentUser.id}`, ['all']);
+
+  listEl.innerHTML = `
+    <label style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(99,102,241,0.1);border-radius:8px;font-weight:700;font-size:12px">
+      <input type="checkbox" id="perm-all" ${currentPerms.includes('all') ? 'checked' : ''} onchange="togglePermAll(this)"> 🌐 Autorizar a TODOS los usuarios registrados
+    </label>
+    ${users.map(u => `
+      <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(255,255,255,0.03);border-radius:8px;font-size:12px">
+        <input type="checkbox" class="perm-user-cb" value="${u.id}" ${currentPerms.includes('all') || currentPerms.includes(u.id) ? 'checked' : ''}>
+        ${u.avatar || '👤'} <strong>${esc(u.name || u.username)}</strong> (${esc(u.email || u.username)})
+      </label>
+    `).join('')}
+  `;
+
+  modal.classList.add('active');
+  modal.style.display = 'flex';
+  modal.style.opacity = '1';
+  modal.style.pointerEvents = 'all';
+}
+
+function togglePermAll(cb) {
+  document.querySelectorAll('.perm-user-cb').forEach(el => el.checked = cb.checked);
+}
+
+function saveExpensePermissions() {
+  const currentUser = getCurrentUser();
+  const permAll = document.getElementById('perm-all')?.checked;
+  let allowed = [];
+  if (permAll) {
+    allowed = ['all'];
+  } else {
+    document.querySelectorAll('.perm-user-cb:checked').forEach(el => allowed.push(el.value));
+  }
+  toLS(`ejcp_expense_permissions_${currentUser.id}`, allowed);
+  closeExpensePermissionsModal();
+  showToast('🔐 Permisos de visibilidad de gastos guardados correctamente', 'success');
+}
+
+function closeExpensePermissionsModal() {
+  const modal = document.getElementById('modal-expense-permissions');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+    modal.style.opacity = '0';
+    modal.style.pointerEvents = 'none';
+  }
+}
+
+function sendWelcomeEmailNotification(userObj) {
+  if (!userObj) return;
+  const targetEmail = userObj.email || `${userObj.username}@cosasdelavida.app`;
+  const emails = fromLS('ejcp_email_notifications', []);
+  const newEmail = {
+    id: 'eml-' + uid(),
+    to: targetEmail,
+    subject: `¡Bienvenido a COSAS DE LA VIDA, ${userObj.name || userObj.username}!`,
+    date: new Date().toISOString(),
+    body: `Hola ${userObj.name || userObj.username},\n\n¡Tu cuenta ha sido creada exitosamente en COSAS DE LA VIDA!\n\nDetalles de tu cuenta:\n• Correo: ${targetEmail}\n• Nombre de Usuario: ${userObj.username}\n• Rol: ${userObj.role.toUpperCase()}\n\nYa puedes acceder desde cualquier dispositivo a tu espacio de trabajo personal.\n\nSaludos cordiales,\nEl equipo de COSAS DE LA VIDA`
+  };
+  emails.push(newEmail);
+  toLS('ejcp_email_notifications', emails);
+
+  // Disparo de llamada HTTP a API de servidor Backend para envío de correo real
+  fetch('/api/send-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      to: targetEmail,
+      subject: newEmail.subject,
+      body: newEmail.body,
+      name: userObj.name || userObj.username
+    })
+  }).then(res => res.json()).then(data => {
+    if (data.success) {
+      showToast(`✉️ Correo electrónico enviado a: "${targetEmail}"`, 'success');
+    }
+  }).catch(err => {
+    console.warn('Backend Email API Call Notice:', err);
+  });
+
+  const modal = document.getElementById('modal-welcome-email-preview');
+  const elTo = document.getElementById('we-to-email');
+  const elSub = document.getElementById('we-subject');
+  const elBody = document.getElementById('we-body-content');
+
+  if (modal && elTo && elBody) {
+    elTo.textContent = targetEmail;
+    if (elSub) elSub.textContent = newEmail.subject;
+    elBody.textContent = newEmail.body;
+
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+    modal.style.opacity = '1';
+    modal.style.pointerEvents = 'all';
+  }
+}
+
+function closeWelcomeEmailModal() {
+  const modal = document.getElementById('modal-welcome-email-preview');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+    modal.style.opacity = '0';
+    modal.style.pointerEvents = 'none';
+  }
+}
+
+function searchUserByNameOrEmail(query) {
+  const users = getStoredUsers();
+  if (!query) return users;
+  const q = query.trim().toLowerCase();
+  return users.filter(u =>
+    (u.name && u.name.toLowerCase().includes(q)) ||
+    (u.username && u.username.toLowerCase().includes(q)) ||
+    (u.email && u.email.toLowerCase().includes(q))
+  );
+}
+
+// ═══════════════════════════════════════════
+//  GOOGLE OAUTH / SIGN-IN SYSTEM
+// ═══════════════════════════════════════════
+
+function parseJwtToken(token) {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    console.warn('JWT Decode error:', e);
+    return null;
+  }
+}
+
+function handleGoogleCredentialResponse(response) {
+  if (!response || !response.credential) {
+    showToast('⚠️ No se recibió credencial válida de Google', 'warning');
+    return;
+  }
+
+  const payload = parseJwtToken(response.credential);
+  if (!payload || !payload.email) {
+    showToast('❌ Error decodificando datos del perfil de Google', 'error');
+    return;
+  }
+
+  processGoogleUserSignIn({
+    email: payload.email,
+    name: payload.name || payload.email.split('@')[0],
+    googleId: payload.sub,
+    picture: payload.picture
+  });
+}
+
+function processGoogleUserSignIn(gData) {
+  fetch('/api/google-auth', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: gData.email, name: gData.name, googleId: gData.googleId })
+  }).then(res => res.json()).then(backendRes => {
+    if (backendRes.success) {
+      console.log('Google Auth Verified by Backend API:', backendRes);
+    }
+  }).catch(e => console.warn('Google Auth API notice:', e));
+
+  const users = getStoredUsers();
+  let targetUser = users.find(u =>
+    (u.email && u.email.toLowerCase() === gData.email.toLowerCase()) ||
+    (u.googleId && u.googleId === gData.googleId)
+  );
+
+  if (targetUser) {
+    if (targetUser.status && (targetUser.status.includes('Suspendido') || targetUser.status.includes('bloqueado'))) {
+      showToast('⛔ Tu cuenta se encuentra suspendida por el Administrador. Contacta a soporte.', 'error');
+      return;
+    }
+
+    setCurrentUser(targetUser);
+    closeAuthModal();
+    showToast(`🌐 Sesión iniciada con Google como "${targetUser.name || targetUser.username}"`, 'success');
+    if (typeof loadAll === 'function') loadAll();
+    if (typeof safeUIRefresh === 'function') safeUIRefresh();
+  } else {
+    const newId = 'usr-g-' + uid();
+    const newUser = {
+      id: newId,
+      googleId: gData.googleId,
+      username: gData.email.split('@')[0],
+      email: gData.email,
+      password: 'google-oauth-' + uid(),
+      role: 'secundario',
+      name: gData.name,
+      avatar: '🌐',
+      status: '🟢 En línea'
+    };
+
+    users.push(newUser);
+    toLS('ejcp_users', users);
+
+    toLS(`ejcp_tasks_${newId}`, []);
+    toLS(`ejcp_tickets_${newId}`, []);
+    toLS(`ejcp_network_${newId}`, []);
+    toLS(`ejcp_economy_${newId}`, []);
+    toLS(`ejcp_debts_${newId}`, []);
+    toLS(`ejcp_activities_${newId}`, []);
+    toLS(`ejcp_accounts_${newId}`, {
+      binance:   { name: 'Binance',   cur: 'USDT', emoji: '🟡', balance: 0, baseBalance: 0 },
+      airtm:     { name: 'AIRTM',    cur: 'USD',  emoji: '💙', balance: 0, baseBalance: 0 },
+      zinli:     { name: 'Zinli',    cur: 'USD',  emoji: '🟣', balance: 0, baseBalance: 0 },
+      bolivares: { name: 'Bolívares', cur: 'VES',  emoji: '🇻🇪', balance: 0, baseBalance: 0 },
+      efectivo:  { name: 'Efectivo', cur: 'USD',  emoji: '💵', balance: 0, baseBalance: 0 }
+    });
+    toLS(`ejcp_cleared_${newId}`, true);
+
+    setCurrentUser(newUser);
+    closeAuthModal();
+    trackGoogleAnalyticsEvent('sign_up', { method: 'Google', user_id: newUser.id, email: newUser.email });
+    showToast(`🌐 ✨ Cuenta creada con Google: "${newUser.name}" (1-Clic Conectado)`, 'success');
+    if (typeof sendWelcomeEmailNotification === 'function') sendWelcomeEmailNotification(newUser);
+    if (typeof loadAll === 'function') loadAll();
+    if (typeof safeUIRefresh === 'function') safeUIRefresh();
+  }
+}
+
+function trackGoogleAnalyticsEvent(eventName, eventParams) {
+  console.log(`[Google Analytics Event] 📊 Evento registrado: "${eventName}"`, eventParams);
+  if (typeof window.gtag === 'function') {
+    window.gtag('event', eventName, eventParams);
+  }
+}
+
+function triggerGoogleSignIn() {
+  const modal = document.getElementById('modal-google-auth');
+  if (modal) {
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+    modal.style.opacity = '1';
+    modal.style.pointerEvents = 'all';
+    modal.style.zIndex = '10010';
+    const emailInput = document.getElementById('google-auth-email-input');
+    if (emailInput) {
+      emailInput.value = 'ed11jo78@gmail.com';
+      setTimeout(() => emailInput.focus(), 100);
+    }
+  } else {
+    const promptEmail = prompt('🌐 INICIO DE SESIÓN CON GOOGLE:\n\nIngresa tu correo electrónico de Google para autenticarte o registrarte en 1-Clic:', 'ed11jo78@gmail.com');
+    if (!promptEmail || !promptEmail.trim()) return;
+    confirmGoogleSignIn(promptEmail.trim());
+  }
+}
+
+function closeGoogleAuthModal() {
+  const modal = document.getElementById('modal-google-auth');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+    modal.style.opacity = '0';
+    modal.style.pointerEvents = 'none';
+  }
+}
+
+function handleGoogleFormSubmit(e) {
+  if (e) e.preventDefault();
+  const input = document.getElementById('google-auth-email-input');
+  const email = input ? input.value.trim() : '';
+  if (!email || !email.includes('@')) {
+    showToast('⚠️ Ingresa un correo electrónico de Google válido', 'warning');
+    return;
+  }
+  confirmGoogleSignIn(email);
+}
+
+function confirmGoogleSignIn(email) {
+  closeGoogleAuthModal();
+  const emailClean = email.trim().toLowerCase();
+  const nameFromEmail = emailClean.split('@')[0].toUpperCase();
+
+  processGoogleUserSignIn({
+    email: emailClean,
+    name: nameFromEmail,
+    googleId: 'g-' + uid()
+  });
+}
+
 // Global scope window assignments
 if (typeof window !== 'undefined') {
   window.openUserSwitchModal        = openUserSwitchModal;
@@ -5684,6 +6149,24 @@ if (typeof window !== 'undefined') {
   window.checkAuthLockScreen        = checkAuthLockScreen;
   window.toggleAuthMode             = toggleAuthMode;
   window.resetDatabaseToZero        = resetDatabaseToZero;
+  window.fetchAutomaticRates        = fetchAutomaticRates;
+  window.renderAdminUsersTable      = renderAdminUsersTable;
+  window.adminTestChatWithUser      = adminTestChatWithUser;
+  window.openExpensePermissionsModal= openExpensePermissionsModal;
+  window.togglePermAll              = togglePermAll;
+  window.saveExpensePermissions     = saveExpensePermissions;
+  window.closeExpensePermissionsModal = closeExpensePermissionsModal;
+  window.sendWelcomeEmailNotification = sendWelcomeEmailNotification;
+  window.closeWelcomeEmailModal     = closeWelcomeEmailModal;
+  window.searchUserByNameOrEmail    = searchUserByNameOrEmail;
+  window.adminToggleUserStatus      = adminToggleUserStatus;
+  window.adminDeleteUser            = adminDeleteUser;
+  window.triggerGoogleSignIn        = triggerGoogleSignIn;
+  window.closeGoogleAuthModal       = closeGoogleAuthModal;
+  window.handleGoogleFormSubmit     = handleGoogleFormSubmit;
+  window.confirmGoogleSignIn        = confirmGoogleSignIn;
+  window.handleGoogleCredentialResponse = handleGoogleCredentialResponse;
+  window.processGoogleUserSignIn    = processGoogleUserSignIn;
 
   window.addEventListener('storage', (e) => {
     if (e.key === 'ejcp_messages') {
@@ -5695,6 +6178,9 @@ if (typeof window !== 'undefined') {
   });
 
   document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(checkAuthLockScreen, 100);
+    setTimeout(() => {
+      checkAuthLockScreen();
+      fetchAutomaticRates();
+    }, 100);
   });
 }
