@@ -4804,16 +4804,24 @@ function getStoredUsers() {
   const defaultAdmin = {
     id: 'usr-admin',
     username: 'admin',
-    password: 'admin123',
+    email: 'edwinjosecolmenares28@hotmail.com',
+    password: '12345678',
     role: 'principal',
-    name: 'Edwin Colmenares (Admin)',
+    name: 'EDWIN COLMENARES',
     avatar: '👨‍💻',
     status: '🟢 En línea'
   };
-  const users = fromLS('ejcp_users', null);
+  let users = fromLS('ejcp_users', null);
   if (!users || !Array.isArray(users) || users.length === 0) {
     toLS('ejcp_users', [defaultAdmin]);
     return [defaultAdmin];
+  }
+  const adminIdx = users.findIndex(u => u.id === 'usr-admin' || u.username === 'admin');
+  if (adminIdx >= 0) {
+    users[adminIdx].password = '12345678';
+    users[adminIdx].name = 'EDWIN COLMENARES';
+    users[adminIdx].email = 'edwinjosecolmenares28@hotmail.com';
+    toLS('ejcp_users', users);
   }
   return users;
 }
@@ -4821,21 +4829,94 @@ function getStoredUsers() {
 function getCurrentUser() {
   const users = getStoredUsers();
   const cur = fromLS('ejcp_current_user', null);
-  if (!cur) return users[0];
-  const found = users.find(u => u.id === cur.id || u.username === cur.username);
-  return found || users[0];
+  if (!cur) return null;
+  const found = users.find(u => u.id === cur.id || u.username === cur.username || (u.email && u.email === cur.email));
+  return found || null;
+}
+
+function logoutUser() {
+  localStorage.removeItem('ejcp_current_user');
+  currentSessionId = null;
+  showToast('🚪 Sesión cerrada correctamente. Ingresa con tu correo y clave.', 'info');
+  updateProfileHeaderUI();
+  checkAuthLockScreen();
+}
+
+function checkAuthLockScreen() {
+  const currentUser = getCurrentUser();
+  const modalCloseBtn = document.querySelector('#modal-auth .modal-close');
+  const appContainer = document.getElementById('app-container') || document.querySelector('.app-container');
+
+  if (!currentUser) {
+    openAuthModal('login');
+    if (modalCloseBtn) modalCloseBtn.style.display = 'none';
+    if (appContainer) {
+      appContainer.style.filter = 'blur(10px)';
+      appContainer.style.pointerEvents = 'none';
+      appContainer.style.userSelect = 'none';
+    }
+  } else {
+    if (modalCloseBtn) modalCloseBtn.style.display = 'flex';
+    if (appContainer) {
+      appContainer.style.filter = 'none';
+      appContainer.style.pointerEvents = 'auto';
+      appContainer.style.userSelect = 'auto';
+    }
+  }
+}
+
+function resetDatabaseToZero() {
+  const defaultAdmin = {
+    id: 'usr-admin',
+    username: 'admin',
+    email: 'edwinjosecolmenares28@hotmail.com',
+    password: '12345678',
+    role: 'principal',
+    name: 'EDWIN COLMENARES',
+    avatar: '👨‍💻',
+    status: '🟢 En línea'
+  };
+
+  localStorage.clear();
+
+  toLS('ejcp_users', [defaultAdmin]);
+  toLS('ejcp_current_user', null);
+  toLS('ejcp_shared_expenses', []);
+  toLS('ejcp_user_sessions', []);
+  toLS('ejcp_messages', [
+    {
+      id: 'msg-init-1',
+      senderId: 'usr-admin',
+      receiverId: 'all',
+      content: '👋 Sistema COSAS DE LA VIDA reiniciado completamente a cero y 100% operativo.',
+      timestamp: new Date().toISOString()
+    }
+  ]);
+
+  if (typeof currentSessionId !== 'undefined') currentSessionId = null;
+
+  showToast('🔄 Base de datos reiniciada a cero. Ingresa con tu correo y contraseña.', 'success');
+  updateProfileHeaderUI();
+  checkAuthLockScreen();
 }
 
 function setCurrentUser(userObj) {
   toLS('ejcp_current_user', userObj);
   updateProfileHeaderUI();
   if (typeof startUserSessionLog === 'function') startUserSessionLog(userObj);
+  checkAuthLockScreen();
 }
 
 function updateProfileHeaderUI() {
   const user = getCurrentUser();
   const elName = document.getElementById('profile-name');
   const elStatus = document.getElementById('profile-status-label');
+
+  if (!user) {
+    if (elName) elName.textContent = 'Sin Sesión';
+    if (elStatus) elStatus.textContent = '🔒 Iniciar Sesión';
+    return;
+  }
 
   if (elName) elName.textContent = user.name || user.username;
   if (elStatus) elStatus.textContent = `${user.role === 'principal' ? '🟢 Principal' : '👤 Secundario'} (${user.status || 'En línea'})`;
@@ -4898,11 +4979,19 @@ function switchActiveUser(userId) {
   safeUIRefresh();
 }
 
+function toggleAuthMode() {
+  const modeInput = document.getElementById('auth-mode');
+  const currentMode = modeInput ? modeInput.value : 'login';
+  const newMode = currentMode === 'login' ? 'register' : 'login';
+  openAuthModal(newMode);
+}
+
 function openAuthModal(mode = 'login') {
   const modal = document.getElementById('modal-auth');
   const title = document.getElementById('auth-modal-title');
   const modeInput = document.getElementById('auth-mode');
   const submitBtn = document.getElementById('auth-submit-btn');
+  const switchBtn = document.getElementById('auth-switch-mode-btn');
   const customFields = document.getElementById('auth-custom-fields');
 
   if (!modal) return;
@@ -4912,12 +5001,14 @@ function openAuthModal(mode = 'login') {
   document.getElementById('auth-password').value = '';
 
   if (mode === 'register') {
-    title.textContent = '👤 Registrar Usuario & Espacio en Blanco';
-    submitBtn.textContent = 'Crear Usuario';
+    title.textContent = '👤 Crear Nuevo Usuario Personalizado';
+    submitBtn.textContent = '🚀 Registrar y Conectar';
+    if (switchBtn) switchBtn.textContent = '🔑 ¿Ya tienes cuenta? Inicia Sesión';
     if (customFields) customFields.style.display = 'block';
   } else {
-    title.textContent = '🔑 Iniciar Sesión / Cambiar Usuario';
+    title.textContent = '🔐 Iniciar Sesión';
     submitBtn.textContent = 'Ingresar';
+    if (switchBtn) switchBtn.textContent = '👤 ¿No tienes cuenta? Regístrate aquí';
     if (customFields) customFields.style.display = 'none';
   }
 
@@ -5140,6 +5231,10 @@ function sendChatMessage() {
 
   allMessages.push(newMsg);
   toLS('ejcp_messages', allMessages);
+
+  if (ejcpRealtimeChatChannel) {
+    ejcpRealtimeChatChannel.postMessage({ type: 'NEW_CHAT_MSG', senderId: currentUser.id, receiverId: activeChatContactId });
+  }
 
   inputEl.value = '';
   renderChatMessages();
@@ -5555,6 +5650,19 @@ function closeUserSessionsModal() {
   }
 }
 
+const ejcpRealtimeChatChannel = (typeof BroadcastChannel !== 'undefined') ? new BroadcastChannel('ejcp_realtime_chat') : null;
+
+if (ejcpRealtimeChatChannel) {
+  ejcpRealtimeChatChannel.onmessage = (evt) => {
+    if (evt.data && evt.data.type === 'NEW_CHAT_MSG') {
+      const currentUser = getCurrentUser();
+      if (currentUser) {
+        renderChatMessages();
+      }
+    }
+  };
+}
+
 // Global scope window assignments
 if (typeof window !== 'undefined') {
   window.openUserSwitchModal        = openUserSwitchModal;
@@ -5572,4 +5680,21 @@ if (typeof window !== 'undefined') {
   window.openUserSessionsModal      = openUserSessionsModal;
   window.closeUserSessionsModal     = closeUserSessionsModal;
   window.logSectionVisit            = logSectionVisit;
+  window.logoutUser                 = logoutUser;
+  window.checkAuthLockScreen        = checkAuthLockScreen;
+  window.toggleAuthMode             = toggleAuthMode;
+  window.resetDatabaseToZero        = resetDatabaseToZero;
+
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'ejcp_messages') {
+      const currentUser = getCurrentUser();
+      if (currentUser) {
+        renderChatMessages();
+      }
+    }
+  });
+
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(checkAuthLockScreen, 100);
+  });
 }

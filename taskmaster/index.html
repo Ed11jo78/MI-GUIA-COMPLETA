@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>COSAS DE MI VIDA EJCP</title>
+  <title>COSAS DE LA VIDA</title>
   <meta name="description" content="Plataforma personal de gestión: tareas, tickets de soporte, caídas de red y control económico." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -21,8 +21,8 @@
   <div class="sidebar-logo">
     <div class="logo-icon">🌟</div>
     <div class="logo-texts">
-      <span class="logo-title">COSAS DE MI</span>
-      <span class="logo-sub">VIDA EJCP</span>
+      <span class="logo-title">COSAS DE</span>
+      <span class="logo-sub">LA VIDA</span>
     </div>
   </div>
 
@@ -40,14 +40,22 @@
       <div class="profile-edit-icon">✏️</div>
     </div>
     <div style="display:flex;gap:4px;width:100%;margin-top:4px">
-      <button onclick="event.stopPropagation();openRegisterModal()" style="flex:1;padding:6px 6px;font-size:10px;font-weight:800;background:var(--accent);color:#070913;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:2px">
+      <button onclick="event.stopPropagation();openRegisterModal()" style="flex:1;padding:6px 4px;font-size:10px;font-weight:800;background:var(--accent);color:#070913;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center">
         👤 Registrar
       </button>
-      <button onclick="event.stopPropagation();openUserSwitchModal()" style="flex:1;padding:6px 6px;font-size:10px;font-weight:700;background:rgba(255,255,255,0.06);color:var(--text-primary);border:1px solid var(--border-light);border-radius:6px;cursor:pointer">
+      <button onclick="event.stopPropagation();openUserSwitchModal()" style="flex:1;padding:6px 4px;font-size:10px;font-weight:700;background:rgba(255,255,255,0.06);color:var(--text-primary);border:1px solid var(--border-light);border-radius:6px;cursor:pointer">
         🔑 Cambiar
       </button>
-      <button onclick="event.stopPropagation();openUserSessionsModal()" style="flex:1;padding:6px 6px;font-size:10px;font-weight:700;background:rgba(255,255,255,0.06);color:var(--text-primary);border:1px solid var(--border-light);border-radius:6px;cursor:pointer" title="Ver historial de sesiones de uso">
+      <button onclick="event.stopPropagation();openUserSessionsModal()" style="flex:1;padding:6px 4px;font-size:10px;font-weight:700;background:rgba(255,255,255,0.06);color:var(--text-primary);border:1px solid var(--border-light);border-radius:6px;cursor:pointer" title="Ver historial de sesiones">
         📜 Sesiones
+      </button>
+      <button onclick="event.stopPropagation();logoutUser()" style="flex:1;padding:6px 4px;font-size:10px;font-weight:700;background:rgba(239,68,68,0.15);color:var(--red);border:1px solid rgba(239,68,68,0.3);border-radius:6px;cursor:pointer" title="Cerrar Sesión">
+        🚪 Salir
+      </button>
+    </div>
+    <div style="margin-top:6px;width:100%">
+      <button onclick="event.stopPropagation();if(confirm('⚠️ ¿Seguro que deseas reiniciar completamente la Base de Datos a cero?')) resetDatabaseToZero()" style="width:100%;padding:5px;font-size:10px;font-weight:700;background:rgba(245,158,11,0.12);color:var(--amber);border:1px solid rgba(245,158,11,0.3);border-radius:6px;cursor:pointer" title="Reiniciar BD y Configuración a Cero">
+        🔄 Reiniciar BD a Cero
       </button>
     </div>
   </div>
@@ -1961,7 +1969,7 @@
 
 <!-- ═══════════ MODAL AUTENTICACIÓN / REGISTRO / PERFIL ═══════════ -->
 <div class="modal-overlay" id="modal-auth" style="display:none">
-  <div class="modal glass-modal" style="max-width:480px;width:92%">
+  <div class="modal glass-modal" style="max-width:500px;width:92%">
     <div class="modal-header">
       <h3 id="auth-modal-title">🔐 Iniciar Sesión</h3>
       <button class="modal-close" onclick="closeAuthModal()">✕</button>
@@ -1971,26 +1979,31 @@
         <input type="hidden" id="auth-mode" value="login">
         
         <div style="margin-bottom:14px">
-          <label style="display:block;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px">Nombre de usuario (Login)</label>
-          <input type="text" id="auth-username" required placeholder="Ej: admin, juan, maria" style="width:100%;padding:10px 14px;background:rgba(255,255,255,0.05);border:1px solid var(--border-light);border-radius:8px;color:var(--text-primary);font-size:13px">
+          <label style="display:block;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px">Correo Electrónico o Nombre de usuario *</label>
+          <input type="text" id="auth-username" required placeholder="Ej: edwinjosecolmenares28@hotmail.com o admin" style="width:100%;padding:11px 14px;background:rgba(255,255,255,0.05);border:1px solid var(--border-light);border-radius:10px;color:var(--text-primary);font-size:13px">
         </div>
         
         <div style="margin-bottom:14px">
-          <label style="display:block;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px">Contraseña</label>
-          <input type="password" id="auth-password" required placeholder="Contraseña" style="width:100%;padding:10px 14px;background:rgba(255,255,255,0.05);border:1px solid var(--border-light);border-radius:8px;color:var(--text-primary);font-size:13px">
+          <label style="display:block;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px">Contraseña *</label>
+          <input type="password" id="auth-password" required placeholder="Ingresa tu contraseña" style="width:100%;padding:11px 14px;background:rgba(255,255,255,0.05);border:1px solid var(--border-light);border-radius:10px;color:var(--text-primary);font-size:13px">
         </div>
 
-        <!-- Campos adicionales para Registro / Personalización -->
+        <!-- Campos adicionales para Registro Completo / Personalización -->
         <div id="auth-custom-fields" style="display:none">
           <div style="margin-bottom:14px">
-            <label style="display:block;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px">Nombre Personalizado Visible</label>
-            <input type="text" id="auth-name" placeholder="Ej: Juan Pérez / Soporte Técnico" style="width:100%;padding:10px 14px;background:rgba(255,255,255,0.05);border:1px solid var(--border-light);border-radius:8px;color:var(--text-primary);font-size:13px">
+            <label style="display:block;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px">Confirmar Contraseña *</label>
+            <input type="password" id="auth-confirm-password" placeholder="Repita su contraseña" style="width:100%;padding:11px 14px;background:rgba(255,255,255,0.05);border:1px solid var(--border-light);border-radius:10px;color:var(--text-primary);font-size:13px">
+          </div>
+
+          <div style="margin-bottom:14px">
+            <label style="display:block;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px">Nombre Completo Visible</label>
+            <input type="text" id="auth-name" placeholder="Ej: EDWIN COLMENARES / Soporte Técnico" style="width:100%;padding:11px 14px;background:rgba(255,255,255,0.05);border:1px solid var(--border-light);border-radius:10px;color:var(--text-primary);font-size:13px">
           </div>
 
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
             <div>
               <label style="display:block;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px">Avatar / Emoji</label>
-              <select id="auth-avatar" style="width:100%;padding:10px 14px;background:rgba(15,23,42,0.9);border:1px solid var(--border-light);border-radius:8px;color:var(--text-primary);font-size:13px">
+              <select id="auth-avatar" style="width:100%;padding:11px 14px;background:rgba(15,23,42,0.9);border:1px solid var(--border-light);border-radius:10px;color:var(--text-primary);font-size:13px">
                 <option value="👤">👤 Usuario Estándar</option>
                 <option value="👨‍💻">👨‍💻 Desarrollador / Admin</option>
                 <option value="👩‍💻">👩‍💻 Especialista IT</option>
@@ -2002,7 +2015,7 @@
             </div>
             <div>
               <label style="display:block;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px">Rol del Usuario</label>
-              <select id="auth-role" style="width:100%;padding:10px 14px;background:rgba(15,23,42,0.9);border:1px solid var(--border-light);border-radius:8px;color:var(--text-primary);font-size:13px">
+              <select id="auth-role" style="width:100%;padding:11px 14px;background:rgba(15,23,42,0.9);border:1px solid var(--border-light);border-radius:10px;color:var(--text-primary);font-size:13px">
                 <option value="secundario">Secundario (Cliente / Invitado)</option>
                 <option value="principal">Principal (Administrador)</option>
               </select>
@@ -2011,7 +2024,7 @@
 
           <div style="margin-bottom:14px">
             <label style="display:block;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px">Estado del Perfil</label>
-            <input type="text" id="auth-status" placeholder="Ej: 🟢 En línea, 🟡 Disponible" value="🟢 En línea" style="width:100%;padding:10px 14px;background:rgba(255,255,255,0.05);border:1px solid var(--border-light);border-radius:8px;color:var(--text-primary);font-size:13px">
+            <input type="text" id="auth-status" placeholder="Ej: 🟢 En línea, 🟡 Disponible" value="🟢 En línea" style="width:100%;padding:11px 14px;background:rgba(255,255,255,0.05);border:1px solid var(--border-light);border-radius:10px;color:var(--text-primary);font-size:13px">
           </div>
 
           <div style="margin-bottom:18px;background:rgba(99,102,241,0.08);padding:10px 14px;border-radius:10px;border:1px solid rgba(99,102,241,0.25)">
@@ -2021,10 +2034,19 @@
           </div>
         </div>
 
-        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:10px">
-          <button type="button" class="btn-secondary" onclick="closeAuthModal()">Cancelar</button>
-          <button type="submit" class="btn-primary" id="auth-submit-btn">Ingresar</button>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;border-top:1px solid var(--border-light);padding-top:14px">
+          <button type="button" id="auth-switch-mode-btn" onclick="toggleAuthMode()" style="background:none;border:none;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;text-decoration:underline">
+            👤 ¿No tienes cuenta? Regístrate aquí
+          </button>
+          <div style="display:flex;gap:8px">
+            <button type="button" class="btn-secondary" onclick="closeAuthModal()">Cancelar</button>
+            <button type="submit" class="btn-primary" id="auth-submit-btn">Ingresar</button>
+          </div>
         </div>
+      </form>
+    </div>
+  </div>
+</div>
       </form>
     </div>
   </div>
